@@ -1622,8 +1622,4 @@ img { max-width: 100%; display: block; }
   /* MOBILE NAV */
   .mobile-nav a { font-size: 24px; }
 
-  /* GLITCH — reduce intensity on mobile for performance */
-  .glitch::before,
-  .glitch::after { display: none; }
-  .glitch { animation: none; }
 }
