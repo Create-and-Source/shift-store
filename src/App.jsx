@@ -1,7 +1,7 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingBag, Menu, X, ArrowRight, Minus, Plus, ChevronRight } from 'lucide-react';
+import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft } from 'lucide-react';
 import { products, collections } from './data/products';
 
 const CartContext = createContext();
@@ -257,6 +257,82 @@ function ProductCard({ product, index }) {
   );
 }
 
+function ProductCarousel({ products: items }) {
+  const trackRef = useRef(null);
+  const [current, setCurrent] = useState(0);
+  const navigate = useNavigate();
+
+  const scroll = (dir) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const card = track.querySelector('.carousel-slide');
+    if (!card) return;
+    const w = card.offsetWidth + 16;
+    const next = Math.max(0, Math.min(current + dir, items.length - 1));
+    track.scrollTo({ left: w * next, behavior: 'smooth' });
+    setCurrent(next);
+  };
+
+  const onScroll = () => {
+    const track = trackRef.current;
+    if (!track) return;
+    const card = track.querySelector('.carousel-slide');
+    if (!card) return;
+    const w = card.offsetWidth + 16;
+    const idx = Math.round(track.scrollLeft / w);
+    setCurrent(idx);
+  };
+
+  return (
+    <div className="carousel">
+      <div className="carousel-viewfinder">
+        <div className="vf-corner vf-tl" />
+        <div className="vf-corner vf-tr" />
+        <div className="vf-corner vf-bl" />
+        <div className="vf-corner vf-br" />
+        <div className="carousel-counter">
+          <span className="carousel-counter-current">{String(current + 1).padStart(2, '0')}</span>
+          <span className="carousel-counter-sep">/</span>
+          <span className="carousel-counter-total">{String(items.length).padStart(2, '0')}</span>
+        </div>
+      </div>
+
+      <div className="carousel-track" ref={trackRef} onScroll={onScroll}>
+        {items.map((p, i) => (
+          <div
+            key={p.id}
+            className={`carousel-slide ${i === current ? 'active' : ''}`}
+            onClick={() => navigate(`/product/${p.id}`)}
+          >
+            <div className="carousel-slide-img glitch-img-wrap">
+              <img src={p.image} alt={p.name} />
+              {p.badge && <div className="carousel-badge">{p.badge}</div>}
+            </div>
+            <div className="carousel-slide-info">
+              <div className="carousel-slide-name">{p.name}</div>
+              <div className="carousel-slide-price">${p.price}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="carousel-nav">
+        <button className="carousel-btn" onClick={() => scroll(-1)} disabled={current === 0}>
+          <ArrowLeft size={18} />
+        </button>
+        <div className="carousel-dots">
+          {items.map((_, i) => (
+            <div key={i} className={`carousel-dot ${i === current ? 'active' : ''}`} />
+          ))}
+        </div>
+        <button className="carousel-btn" onClick={() => scroll(1)} disabled={current === items.length - 1}>
+          <ArrowRight size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ═══ PAGES ═══ */
 
 function HomePage() {
@@ -356,7 +432,7 @@ function HomePage() {
         </p>
       </motion.section>
 
-      {/* PRODUCTS */}
+      {/* PRODUCTS — Camera Roll Carousel */}
       <section className="products-section">
         <div className="products-header">
           <h2 className="products-title">The Collection</h2>
@@ -364,11 +440,7 @@ function HomePage() {
             View All <ArrowRight size={14} />
           </Link>
         </div>
-        <div className="products-grid">
-          {featured.map((p, i) => (
-            <ProductCard key={p.id} product={p} index={i} />
-          ))}
-        </div>
+        <ProductCarousel products={featured} />
       </section>
 
       {/* MARQUEE 2 */}

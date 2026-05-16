@@ -626,6 +626,180 @@ img { max-width: 100%; display: block; }
   color: var(--gray);
 }
 
+/* ═══ CAMERA ROLL CAROUSEL ═══ */
+.carousel {
+  position: relative;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.carousel-viewfinder {
+  position: absolute;
+  inset: 0 40px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.vf-corner {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-color: var(--red);
+  border-style: solid;
+  border-width: 0;
+  opacity: 0.5;
+}
+
+.vf-tl { top: -8px; left: -8px; border-top-width: 2px; border-left-width: 2px; }
+.vf-tr { top: -8px; right: -8px; border-top-width: 2px; border-right-width: 2px; }
+.vf-bl { bottom: 60px; left: -8px; border-bottom-width: 2px; border-left-width: 2px; }
+.vf-br { bottom: 60px; right: -8px; border-bottom-width: 2px; border-right-width: 2px; }
+
+.carousel-counter {
+  position: absolute;
+  top: -8px;
+  right: 28px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.1em;
+}
+
+.carousel-counter-current { color: var(--red); }
+.carousel-counter-sep { color: var(--gray-dim); margin: 0 4px; }
+.carousel-counter-total { color: var(--gray); }
+
+.carousel-track {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 40px 20px;
+  scrollbar-width: none;
+}
+
+.carousel-track::-webkit-scrollbar { display: none; }
+
+.carousel-slide {
+  flex: 0 0 calc(50% - 8px);
+  scroll-snap-align: start;
+  cursor: pointer;
+  transition: all 0.4s ease;
+  opacity: 0.5;
+}
+
+.carousel-slide.active {
+  opacity: 1;
+}
+
+.carousel-slide:hover { opacity: 1; }
+
+.carousel-slide-img {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.carousel-slide-img img {
+  width: 100%;
+  aspect-ratio: 3/4;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+  filter: saturate(0.7);
+}
+
+.carousel-slide.active .carousel-slide-img img {
+  filter: saturate(1);
+}
+
+.carousel-slide:hover .carousel-slide-img img {
+  transform: scale(1.02);
+  filter: saturate(1);
+}
+
+.carousel-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--red);
+  border: 1px solid var(--red-dim);
+  padding: 3px 8px;
+  background: rgba(5,5,5,0.8);
+  backdrop-filter: blur(4px);
+}
+
+.carousel-slide-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.carousel-slide-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--white);
+}
+
+.carousel-slide-price {
+  font-size: 14px;
+  color: var(--gray);
+  font-weight: 500;
+}
+
+.carousel-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px 40px 0;
+}
+
+.carousel-btn {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--gray-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--white);
+  transition: all 0.3s;
+}
+
+.carousel-btn:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+  box-shadow: 0 0 12px rgba(229,0,0,0.2);
+}
+
+.carousel-btn:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
+.carousel-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.carousel-dot {
+  width: 8px;
+  height: 2px;
+  background: var(--gray-dim);
+  transition: all 0.3s;
+}
+
+.carousel-dot.active {
+  width: 24px;
+  background: var(--red);
+  box-shadow: 0 0 8px rgba(229,0,0,0.4);
+}
+
 /* ═══ PHOTO GRID ═══ */
 .photo-grid {
   display: grid;
@@ -1333,6 +1507,8 @@ img { max-width: 100%; display: block; }
 
   .board-inner { grid-template-columns: repeat(2, 1fr); gap: 40px 24px; padding: 40px 24px; }
 
+  .carousel-slide { flex: 0 0 calc(60% - 8px); }
+
   .marquee-item { font-size: clamp(36px, 6vw, 60px); }
 }
 
@@ -1364,6 +1540,12 @@ img { max-width: 100%; display: block; }
   .board { padding: 0 20px 60px; }
   .board-inner { grid-template-columns: repeat(2, 1fr); gap: 32px 16px; padding: 28px 16px; }
   .pin-label-title { font-size: 13px; }
+
+  .carousel-track { padding: 0 20px 16px; gap: 12px; }
+  .carousel-slide { flex: 0 0 calc(80% - 6px); }
+  .carousel-nav { padding: 16px 20px 0; }
+  .carousel-viewfinder { inset: 0 20px; }
+  .vf-corner { width: 16px; height: 16px; }
 
   .marquee-item { font-size: clamp(28px, 10vw, 48px); }
 }
