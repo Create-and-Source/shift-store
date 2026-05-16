@@ -207,8 +207,6 @@ function Footer() {
           <h4>Company</h4>
           <Link to="/about">About</Link>
           <Link to="/collections">Collections</Link>
-          <a href="#">Size Guide</a>
-          <a href="#">Contact</a>
         </div>
         <div className="footer-col">
           <h4>Info</h4>
