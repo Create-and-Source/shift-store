@@ -1513,39 +1513,117 @@ img { max-width: 100%; display: block; }
 }
 
 @media (max-width: 640px) {
-  .header-inner { padding: 16px 20px; }
-  .header-logo-img { height: 24px; }
+  /* HEADER */
+  .header-inner { padding: 14px 16px; }
+  .header-logo-img { height: 22px; }
 
-  .hero-inner { padding: 40px 20px; }
-  .hero-logo-img { width: clamp(180px, 65vw, 280px); }
+  /* HERO — center content, tighter fit */
+  .hero { align-items: center; }
+  .hero-inner {
+    padding: 0 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .hero-logo-img { width: clamp(200px, 70vw, 300px); }
+  .hero-tagline { font-size: 11px; letter-spacing: 0.25em; }
+  .hero-cta { margin-top: 28px; padding: 12px 28px; font-size: 10px; }
+  .hero-gradient {
+    background: linear-gradient(
+      to top,
+      rgba(5,5,5,0.9) 0%,
+      rgba(5,5,5,0.4) 40%,
+      rgba(5,5,5,0.3) 60%,
+      rgba(5,5,5,0.5) 100%
+    );
+  }
 
-  .intro { padding: 80px 20px; }
+  /* TICKER */
+  .ticker { padding: 12px 0; }
+
+  /* MARQUEE */
+  .marquee { padding: 28px 0; }
+  .marquee-item { font-size: clamp(28px, 10vw, 48px); }
+
+  /* INTRO */
+  .intro { padding: 64px 20px; }
+  .intro-headline { font-size: 24px; }
+  .intro-body { font-size: 14px; }
+  .intro-label { font-size: 10px; margin-bottom: 16px; }
+
+  /* SPREADS */
   .spread-text { padding: 40px 20px; }
+  .spread-title { font-size: 28px; }
+  .spread-body { font-size: 14px; }
+  .spread-img { min-height: 40vh; }
 
-  .products-section { padding: 60px 20px; }
+  /* PULLQUOTE */
+  .pullquote { padding: 60px 20px; }
+  .pullquote-text { font-size: 20px; }
+
+  /* PRODUCTS */
+  .products-section { padding: 48px 0; }
+  .products-header { padding: 0 20px; margin-bottom: 24px; }
+  .products-title { font-size: 24px; }
   .products-grid,
   .shop-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
 
+  /* CAROUSEL */
+  .carousel-track { padding: 0 20px 16px; gap: 12px; }
+  .carousel-slide { flex: 0 0 calc(85% - 6px); }
+  .carousel-slide-name { font-size: 13px; }
+  .carousel-slide-price { font-size: 12px; }
+  .carousel-nav { padding: 16px 20px 0; gap: 14px; }
+  .carousel-btn { width: 38px; height: 38px; }
+  .carousel-viewfinder { display: none; }
+
+  /* PHOTO GRID */
   .photo-grid { gap: 2px; }
 
+  /* DARK SECTION */
+  .dark-section { padding: 0; }
+
+  /* NEWSLETTER */
   .newsletter { padding: 60px 20px; }
+  .newsletter-title { font-size: 24px; }
   .newsletter-form { flex-direction: column; }
+  .newsletter-form button { padding: 14px; }
 
+  /* FOOTER */
   .footer { padding: 40px 20px 24px; }
-  .footer-inner { grid-template-columns: 1fr; gap: 28px; }
+  .footer-inner { grid-template-columns: 1fr; gap: 24px; }
+  .footer-desc { font-size: 12px; }
 
-  .shop-header { padding: 120px 20px 40px; }
+  /* SHOP PAGE */
+  .shop-header { padding: 100px 20px 32px; }
+  .shop-title { font-size: 28px; margin-bottom: 20px; }
+  .shop-filters { gap: 16px; }
   .shop-grid { padding: 0 20px 80px; }
 
-  .board { padding: 0 20px 60px; }
-  .board-inner { grid-template-columns: repeat(2, 1fr); gap: 32px 16px; padding: 28px 16px; }
-  .pin-label-title { font-size: 13px; }
+  /* PRODUCT PAGE */
+  .pdp { padding-top: 70px; }
+  .pdp-layout { padding: 16px; gap: 28px; }
+  .pdp-name { font-size: 24px; }
+  .pdp-price { font-size: 18px; margin-bottom: 20px; }
+  .pdp-desc { font-size: 13px; margin-bottom: 28px; }
+  .size-btn { width: 42px; height: 42px; font-size: 11px; }
 
-  .carousel-track { padding: 0 20px 16px; gap: 12px; }
-  .carousel-slide { flex: 0 0 calc(80% - 6px); }
-  .carousel-nav { padding: 16px 20px 0; }
-  .carousel-viewfinder { inset: 0 20px; }
-  .vf-corner { width: 16px; height: 16px; }
+  /* BOARD */
+  .board { padding: 0 16px 48px; }
+  .board-inner { grid-template-columns: repeat(2, 1fr); gap: 28px 12px; padding: 24px 12px; }
+  .pin { width: 14px; height: 14px; top: -6px; }
+  .pin::after { width: 4px; height: 4px; top: 3px; left: 4px; }
+  .pin-photo { padding: 6px 6px 0; }
+  .pin-label { padding: 8px 6px 10px; }
+  .pin-label-tag { font-size: 8px; }
+  .pin-label-title { font-size: 12px; }
 
-  .marquee-item { font-size: clamp(28px, 10vw, 48px); }
+  /* MOBILE NAV */
+  .mobile-nav a { font-size: 24px; }
+
+  /* GLITCH — reduce intensity on mobile for performance */
+  .glitch::before,
+  .glitch::after { display: none; }
+  .glitch { animation: none; }
 }
