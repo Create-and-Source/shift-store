@@ -643,7 +643,7 @@ function AboutPage() {
 
       <div className="editorial-grid">
         <div className="editorial-text">
-          <img src="/shift-logo.jpeg" alt="Shift" style={{ width: 200, filter: 'brightness(0) invert(1)', marginBottom: 24 }} />
+          <img src="/shift-logo.jpeg" alt="Shift" style={{ width: 200, filter: 'invert(1)', mixBlendMode: 'screen', marginBottom: 24 }} />
           <div className="editorial-quote-sub">Your Mindset. Your Focus. Your Perspective.</div>
         </div>
         <div className="editorial-block">

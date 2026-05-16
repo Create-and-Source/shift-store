@@ -74,7 +74,8 @@ ul { list-style: none; }
 .header-logo-img {
   height: 36px;
   width: auto;
-  filter: brightness(0) invert(1);
+  filter: invert(1);
+  mix-blend-mode: screen;
   transition: opacity 0.3s;
 }
 
@@ -159,7 +160,8 @@ ul { list-style: none; }
 .hero-logo-img {
   width: clamp(280px, 50vw, 600px);
   height: auto;
-  filter: brightness(0) invert(1);
+  filter: invert(1);
+  mix-blend-mode: screen;
   margin-bottom: 20px;
 }
 
@@ -671,7 +673,8 @@ ul { list-style: none; }
 .footer-logo-img {
   height: 40px;
   width: auto;
-  filter: brightness(0) invert(1);
+  filter: invert(1);
+  mix-blend-mode: screen;
   margin-bottom: 16px;
 }
 
