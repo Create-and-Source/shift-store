@@ -12,6 +12,10 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+html, body {
+  overflow-x: hidden;
+}
+
 html {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -21,7 +25,6 @@ html {
 body {
   background: var(--bg);
   color: var(--white);
-  overflow-x: hidden;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -356,6 +359,7 @@ img { max-width: 100%; display: block; }
   border-top: 1px solid var(--gray-dim);
   border-bottom: 1px solid var(--gray-dim);
   background: var(--bg);
+  max-width: 100vw;
 }
 
 .ticker-track {
@@ -845,6 +849,7 @@ img { max-width: 100%; display: block; }
   overflow: hidden;
   border-top: 1px solid var(--gray-dim);
   border-bottom: 1px solid var(--gray-dim);
+  max-width: 100vw;
 }
 
 .marquee-track {
