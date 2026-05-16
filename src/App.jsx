@@ -48,7 +48,8 @@ function VidDivider({ src, title, subtitle, fallbackBg = 'linear-gradient(135deg
   return (
     <div className="vid-divider">
       <div className="vid-divider-clip">
-        {src ? (
+        <div style={{ position: 'absolute', inset: 0, background: fallbackBg }} />
+        {src && (
           <video
             className="vid-divider-video"
             src={src}
@@ -59,8 +60,6 @@ function VidDivider({ src, title, subtitle, fallbackBg = 'linear-gradient(135deg
             onLoadedData={() => setLoaded(true)}
             style={{ opacity: loaded ? 1 : 0 }}
           />
-        ) : (
-          <div style={{ width: '100%', height: '100%', background: fallbackBg }} />
         )}
       </div>
       <div className="vid-divider-overlay-top" />
@@ -230,6 +229,7 @@ function HomePage() {
     <>
       <section className="hero">
         <div className="hero-bg">
+          <div className="hero-fallback-bg" />
           <video
             className="hero-video-bg"
             src="/videos/shift-hero.mp4"
