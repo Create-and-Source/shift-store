@@ -1,6 +1,6 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, createContext, useContext, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { ShoppingBag, Menu, X, ArrowRight, Minus, Plus, ChevronRight } from 'lucide-react';
 import { products, collections } from './data/products';
 
@@ -40,6 +40,38 @@ function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
   return null;
+}
+
+function GlitchText({ children, tag: Tag = 'div', className = '' }) {
+  return (
+    <Tag className={`glitch ${className}`} data-text={children}>
+      {children}
+    </Tag>
+  );
+}
+
+function Marquee({ children, reverse = false, speed = 20, dark = true }) {
+  return (
+    <div className={`marquee ${dark ? '' : 'marquee-light'}`}>
+      <div className="marquee-track" style={{ animationDuration: `${speed}s`, animationDirection: reverse ? 'reverse' : 'normal' }}>
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="marquee-item">{children}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HorizontalScroll({ text, speed = 30 }) {
+  return (
+    <div className="hscroll-section">
+      <div className="hscroll-track" style={{ animationDuration: `${speed}s` }}>
+        {[...Array(4)].map((_, i) => (
+          <span key={i} className="hscroll-text">{text}</span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function VidDivider({ src, title, subtitle, fallbackBg = 'linear-gradient(135deg, #1a1a1a, #2a2a2a)' }) {
@@ -229,6 +261,7 @@ function HomePage() {
 
   return (
     <>
+      {/* ── HERO ── */}
       <section className="hero">
         <div className="hero-bg">
           <div className="hero-fallback-bg" />
@@ -243,6 +276,7 @@ function HomePage() {
             style={{ opacity: heroLoaded ? 1 : 0 }}
           />
         </div>
+        <div className="hero-scanlines" />
         <motion.div
           className="hero-content"
           initial={{ opacity: 0, y: 40 }}
@@ -260,25 +294,40 @@ function HomePage() {
         </div>
       </section>
 
-      <div className="marquee">
-        <div className="marquee-track">
-          {[...Array(2)].map((_, i) => (
-            <div key={i} className="marquee-item">
-              <span>Your Mindset</span><div className="marquee-dot" />
-              <span>Your Focus</span><div className="marquee-dot" />
-              <span>Your Perspective</span><div className="marquee-dot" />
-              <span>Life Keeps Moving</span><div className="marquee-dot" />
-              <span>Keep Pushing</span><div className="marquee-dot" />
-              <span>Shift Forward</span><div className="marquee-dot" />
-              <span>Your Mindset</span><div className="marquee-dot" />
-              <span>Your Focus</span><div className="marquee-dot" />
-              <span>Your Perspective</span><div className="marquee-dot" />
-              <span>Life Keeps Moving</span><div className="marquee-dot" />
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* ── MARQUEE 1 ── */}
+      <Marquee speed={18}>
+        <span>Your Mindset</span><div className="marquee-dot" />
+        <span>Your Focus</span><div className="marquee-dot" />
+        <span>Your Perspective</span><div className="marquee-dot" />
+        <span>Life Keeps Moving</span><div className="marquee-dot" />
+        <span>Keep Pushing</span><div className="marquee-dot" />
+        <span>Shift Forward</span><div className="marquee-dot" />
+      </Marquee>
 
+      {/* ── GLITCH TEXT SECTION ── */}
+      <section className="glitch-section">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8 }}
+        >
+          <GlitchText className="glitch-hero-text">LIFE KEEPS</GlitchText>
+          <GlitchText className="glitch-hero-text glitch-outline">MOVING→</GlitchText>
+        </motion.div>
+      </section>
+
+      {/* ── MARQUEE 2 (reverse, faster) ── */}
+      <Marquee speed={12} reverse>
+        <span>Built Different</span><div className="marquee-dot" />
+        <span>No Reverse</span><div className="marquee-dot" />
+        <span>Stay Locked In</span><div className="marquee-dot" />
+        <span>Forward Only</span><div className="marquee-dot" />
+        <span>shift→</span><div className="marquee-dot" />
+        <span>Never Stop</span><div className="marquee-dot" />
+      </Marquee>
+
+      {/* ── FEATURED PRODUCTS ── */}
       <section className="section section-cream">
         <div className="container">
           <motion.div
@@ -303,12 +352,42 @@ function HomePage() {
         </div>
       </section>
 
+      {/* ── HORIZONTAL SCROLL TEXT ── */}
+      <HorizontalScroll text="SHIFT YOUR PERSPECTIVE →" speed={25} />
+
+      {/* ── VIDEO DIVIDER 1 ── */}
       <VidDivider
         src="/videos/shift-motion.mp4"
         title="Keep Moving Forward"
         subtitle="Built for those who refuse to stand still"
       />
 
+      {/* ── SPLIT IMAGE + GLITCH QUOTE ── */}
+      <section className="split-section">
+        <div className="split-image">
+          <img src="/lifestyle/nyc-convertible-red.png" alt="Shift NYC" loading="lazy" />
+          <div className="split-image-glitch" />
+        </div>
+        <div className="split-text">
+          <motion.div
+            initial={{ opacity: 0, x: 60 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+          >
+            <GlitchText className="split-quote">NO REVERSE</GlitchText>
+            <p className="split-sub">The arrow only points one direction. There is no going back. There is no standing still. There is only forward.</p>
+            <Link to="/shop" className="split-cta">Shop the Drop <ArrowRight size={14} /></Link>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── HORIZONTAL SCROLL TEXT (reverse) ── */}
+      <div style={{ background: 'var(--cream)' }}>
+        <HorizontalScroll text="YOUR MINDSET YOUR FOCUS YOUR PERSPECTIVE →" speed={35} />
+      </div>
+
+      {/* ── LOOKBOOK GRID ── */}
       <section className="lookbook-section">
         <div className="lookbook-grid">
           <motion.div className="lookbook-item lookbook-tall" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
@@ -332,12 +411,72 @@ function HomePage() {
         </div>
       </section>
 
+      {/* ── MARQUEE 3 (big, cream) ── */}
+      <Marquee speed={15} dark={false}>
+        <span>SHIFT→</span><div className="marquee-dot" />
+        <span>KEEP MOVING</span><div className="marquee-dot" />
+        <span>SHIFT→</span><div className="marquee-dot" />
+        <span>KEEP MOVING</span><div className="marquee-dot" />
+        <span>SHIFT→</span><div className="marquee-dot" />
+        <span>KEEP MOVING</span><div className="marquee-dot" />
+      </Marquee>
+
+      {/* ── VIDEO DIVIDER 2 ── */}
       <VidDivider
         src="/videos/shift-racing.mp4"
         title="Racing Collection"
         subtitle="Limited Edition — Built for Speed. No Limits."
       />
 
+      {/* ── FULL BLEED IMAGE WITH GLITCH ── */}
+      <section className="fullbleed-section">
+        <div className="fullbleed-img-wrap">
+          <img src="/lifestyle/convertible-pink-red.png" alt="Shift lifestyle" loading="lazy" />
+          <div className="fullbleed-glitch-overlay" />
+        </div>
+        <div className="fullbleed-text">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+          >
+            <GlitchText className="fullbleed-title">BUILT DIFFERENT</GlitchText>
+            <p className="fullbleed-sub">Premium heavyweight. Oversized fit. Made for those who don't follow — they lead.</p>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── STATS SECTION ── */}
+      <section className="stats-section">
+        <div className="container">
+          <div className="stats-grid">
+            {[
+              { number: '400', unit: 'GSM', label: 'Heavyweight cotton' },
+              { number: '100', unit: '%', label: 'Premium materials' },
+              { number: '∞', unit: '', label: 'Forward momentum' },
+              { number: '0', unit: '', label: 'Reasons to look back' },
+            ].map((s, i) => (
+              <motion.div
+                key={i}
+                className="stat-item"
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: i * 0.1 }}
+              >
+                <div className="stat-number">{s.number}<span className="stat-unit">{s.unit}</span></div>
+                <div className="stat-label">{s.label}</div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── HORIZONTAL SCROLL TEXT 3 ── */}
+      <HorizontalScroll text="FORWARD ONLY → FORWARD ONLY →" speed={20} />
+
+      {/* ── WHY SHIFT ── */}
       <section className="section section-cream">
         <div className="container">
           <motion.div
@@ -375,6 +514,17 @@ function HomePage() {
         </div>
       </section>
 
+      {/* ── MARQUEE 4 (final, dark, big) ── */}
+      <Marquee speed={22} reverse>
+        <span>LIFE KEEPS MOVING</span><div className="marquee-dot" />
+        <span>SHIFT→</span><div className="marquee-dot" />
+        <span>LIFE KEEPS MOVING</span><div className="marquee-dot" />
+        <span>SHIFT→</span><div className="marquee-dot" />
+        <span>LIFE KEEPS MOVING</span><div className="marquee-dot" />
+        <span>SHIFT→</span><div className="marquee-dot" />
+      </Marquee>
+
+      {/* ── NEWSLETTER ── */}
       <section className="newsletter">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -382,7 +532,7 @@ function HomePage() {
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
         >
-          <div className="newsletter-title">Join the Movement</div>
+          <GlitchText className="newsletter-title">Join the Movement</GlitchText>
           <p className="newsletter-sub">Early access to drops, exclusive colorways, and first dibs on limited editions.</p>
           <form className="newsletter-form" onSubmit={e => e.preventDefault()}>
             <input type="email" placeholder="Your email" />
@@ -604,7 +754,7 @@ function CollectionsPage() {
       </div>
 
       <section className="newsletter" style={{ marginTop: 80 }}>
-        <div className="newsletter-title">Get Notified</div>
+        <GlitchText className="newsletter-title">Get Notified</GlitchText>
         <p className="newsletter-sub">Be the first to know when new collections drop.</p>
         <form className="newsletter-form" onSubmit={e => e.preventDefault()}>
           <input type="email" placeholder="Your email" />
@@ -640,6 +790,8 @@ function AboutPage() {
           </motion.div>
         </div>
       </section>
+
+      <HorizontalScroll text="SHIFT YOUR PERSPECTIVE →" speed={30} />
 
       <div className="editorial-grid">
         <div className="editorial-text">
