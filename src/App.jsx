@@ -1,6 +1,6 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ShoppingBag, Menu, X, ArrowRight, Minus, Plus, ChevronRight } from 'lucide-react';
 import { products, collections } from './data/products';
 
@@ -42,10 +42,18 @@ function ScrollToTop() {
   return null;
 }
 
+function GlitchText({ children, tag: Tag = 'span', className = '' }) {
+  return (
+    <Tag className={`glitch ${className}`} data-text={children}>
+      {children}
+    </Tag>
+  );
+}
+
 function Ticker() {
   const items = [
     'Free Shipping Over $150', 'Heavyweight Premium Cotton', 'Life Keeps Moving',
-    'Oversized Fit', 'Limited Drops', 'Your Mindset Your Focus Your Perspective',
+    'Oversized Fit', 'Limited Drops', 'Forward Only', 'No Reverse', 'Shift Your Perspective',
   ];
 
   return (
@@ -59,6 +67,18 @@ function Ticker() {
             </span>
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+function Marquee({ children }) {
+  return (
+    <div className="marquee">
+      <div className="marquee-track">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="marquee-item">{children}</div>
+        ))}
       </div>
     </div>
   );
@@ -137,7 +157,7 @@ function CartDrawer() {
             <div className="cart-items">
               {cart.map(item => (
                 <div key={item.key} className="cart-item">
-                  <img className="cart-item-img" src={item.product.image} alt={item.product.name} style={{ width: 72, height: 90, objectFit: 'cover' }} />
+                  <img className="cart-item-img" src={item.product.image} alt={item.product.name} />
                   <div className="cart-item-info">
                     <div className="cart-item-name">{item.product.name}</div>
                     <div className="cart-item-variant">{item.color} / {item.size}</div>
@@ -151,7 +171,7 @@ function CartDrawer() {
                 </div>
               ))}
             </div>
-            <div className="cart-footer" style={{ padding: '20px 24px', borderTop: '1px solid var(--gray-200)' }}>
+            <div className="cart-footer">
               <div className="cart-total">
                 <span>Total</span>
                 <span>${cartTotal}</span>
@@ -194,19 +214,17 @@ function Footer() {
           <h4>Info</h4>
           <a href="#">Shipping</a>
           <a href="#">Returns</a>
-          <a href="#">Privacy Policy</a>
+          <a href="#">Privacy</a>
           <a href="#">Terms</a>
         </div>
       </div>
       <div className="footer-bottom">
         <span>&copy; {new Date().getFullYear()} Shift. All rights reserved.</span>
-        <span>Life Keeps Moving</span>
+        <span style={{ color: 'var(--red)' }}>Life Keeps Moving &rarr;</span>
       </div>
     </footer>
   );
 }
-
-/* ═══ PRODUCT CARD ═══ */
 
 function ProductCard({ product, index }) {
   const navigate = useNavigate();
@@ -219,19 +237,19 @@ function ProductCard({ product, index }) {
       transition={{ duration: 0.5, delay: index * 0.06 }}
       onClick={() => navigate(`/product/${product.id}`)}
     >
-      <img
-        className="product-card-img"
-        src={product.image}
-        alt={product.name}
-        loading="lazy"
-      />
-      {product.badge && (
-        <div className="product-card-badge">{product.badge}</div>
-      )}
+      <div className="glitch-img-wrap">
+        <img
+          className="product-card-img"
+          src={product.image}
+          alt={product.name}
+          loading="lazy"
+        />
+      </div>
+      {product.badge && <div className="product-card-badge">{product.badge}</div>}
       <div className="product-card-name">{product.name}</div>
       <div className="product-card-price">
         {product.comparePrice && (
-          <span style={{ textDecoration: 'line-through', color: 'var(--text-faint)', marginRight: 8 }}>${product.comparePrice}</span>
+          <span style={{ textDecoration: 'line-through', color: 'var(--gray)', marginRight: 8 }}>${product.comparePrice}</span>
         )}
         ${product.price}
       </div>
@@ -247,20 +265,21 @@ function HomePage() {
 
   return (
     <>
-      {/* HERO — full-bleed video, bottom-aligned content */}
+      {/* SCANLINES */}
+      <div className="scanlines" />
+
+      {/* HERO */}
       <section className="hero">
-        <div className="hero-img">
+        <div className="hero-media">
           <img src="/lifestyle/street-crossing.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           <video
             src="/videos/shift-hero.mp4"
-            autoPlay
-            muted
-            loop
-            playsInline
+            autoPlay muted loop playsInline
             onLoadedData={() => setHeroLoaded(true)}
             style={{ position: 'absolute', inset: 0, opacity: heroLoaded ? 1 : 0, width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 1s' }}
           />
           <div className="hero-gradient" />
+          <div className="hero-scanline" />
         </div>
         <motion.div
           className="hero-inner"
@@ -269,9 +288,9 @@ function HomePage() {
           transition={{ duration: 1, delay: 0.3 }}
         >
           <img src="/shift-logo.png" alt="Shift" className="hero-logo-img" />
-          <div className="hero-sub">Life Keeps Moving</div>
+          <div className="hero-tagline">Life Keeps Moving</div>
           <Link to="/shop" className="hero-cta">
-            Shop the Collection <ArrowRight size={14} />
+            Shop Now <ArrowRight size={14} />
           </Link>
         </motion.div>
       </section>
@@ -279,7 +298,12 @@ function HomePage() {
       {/* TICKER */}
       <Ticker />
 
-      {/* EDITORIAL INTRO */}
+      {/* GLITCH MARQUEE */}
+      <Marquee>
+        <span className="filled">SHIFT</span> <span>&rarr;</span> <span className="red">FORWARD</span> <span>&rarr;</span> <span>ONLY</span> <span>&rarr;</span>
+      </Marquee>
+
+      {/* INTRO */}
       <motion.section
         className="intro"
         initial={{ opacity: 0, y: 30 }}
@@ -289,16 +313,16 @@ function HomePage() {
       >
         <div className="intro-label">The Brand</div>
         <h2 className="intro-headline">
-          More than apparel. A mindset. A movement. A daily reminder to keep pushing forward.
+          <GlitchText>More than apparel. A mindset. A movement.</GlitchText>
         </h2>
         <p className="intro-body">
-          Every piece we create carries the energy of forward motion. Heavyweight, premium, built to last — designed for people who move with intention, not distraction. The arrow only points one direction.
+          Every piece carries the energy of forward motion. Heavyweight, premium, built to last — designed for people who move with intention. The arrow only points one direction.
         </p>
       </motion.section>
 
-      {/* SPREAD — Image Left, Text Right */}
+      {/* SPREAD — Essentials */}
       <section className="spread">
-        <div className="spread-img">
+        <div className="spread-img glitch-img-wrap">
           <img src="/lifestyle/street-crossing.png" alt="Shift on the streets" loading="lazy" />
         </div>
         <motion.div
@@ -309,7 +333,7 @@ function HomePage() {
           transition={{ duration: 0.7 }}
         >
           <div className="spread-label">Essentials</div>
-          <h2 className="spread-title">Built for<br />the Move</h2>
+          <h2 className="spread-title"><GlitchText>Built for the Move</GlitchText></h2>
           <p className="spread-body">
             400gsm heavyweight cotton. Oversized, relaxed cuts. Pre-shrunk fleece that holds its shape wear after wear. This isn't fast fashion — it's built to last.
           </p>
@@ -328,11 +352,11 @@ function HomePage() {
         transition={{ duration: 0.8 }}
       >
         <p className="pullquote-text">
-          "The arrow only points one direction — <em>forward</em>. There is no reverse, no pause button, no going back."
+          "The arrow only points one direction — <em>forward</em>. There is no reverse. No pause. No going back."
         </p>
       </motion.section>
 
-      {/* PRODUCT GRID */}
+      {/* PRODUCTS */}
       <section className="products-section">
         <div className="products-header">
           <h2 className="products-title">The Collection</h2>
@@ -347,40 +371,46 @@ function HomePage() {
         </div>
       </section>
 
+      {/* MARQUEE 2 */}
+      <Marquee>
+        <span className="red">NO REVERSE</span> <span>&rarr;</span> <span className="filled">KEEP MOVING</span> <span>&rarr;</span> <span>SHIFT</span> <span>&rarr;</span>
+      </Marquee>
+
       {/* PHOTO GRID */}
       <div className="photo-grid">
-        <div className="photo-grid-item tall">
+        <div className="photo-grid-item tall glitch-img-wrap">
           <img src="/lifestyle/chinatown.jpg" alt="Shift Chinatown" loading="lazy" />
         </div>
-        <div className="photo-grid-item">
+        <div className="photo-grid-item glitch-img-wrap">
           <img src="/lifestyle/nyc-convertible.png" alt="Shift NYC" loading="lazy" />
         </div>
-        <div className="photo-grid-item">
+        <div className="photo-grid-item glitch-img-wrap">
           <img src="/lifestyle/car-meet.png" alt="Shift car meet" loading="lazy" />
         </div>
-        <div className="photo-grid-item">
+        <div className="photo-grid-item glitch-img-wrap">
           <img src="/lifestyle/coffee-shop.png" alt="Shift coffee" loading="lazy" />
         </div>
-        <div className="photo-grid-item tall">
+        <div className="photo-grid-item tall glitch-img-wrap">
           <img src="/lifestyle/nyc-crosswalk.png" alt="Shift crosswalk" loading="lazy" />
         </div>
-        <div className="photo-grid-item">
+        <div className="photo-grid-item glitch-img-wrap">
           <img src="/lifestyle/pool-party.png" alt="Shift poolside" loading="lazy" />
         </div>
       </div>
 
-      {/* DARK SECTION — Reverse Spread */}
+      {/* DARK SECTION — Racing */}
       <section className="dark-section">
         <div className="spread spread-reverse" style={{ minHeight: 'auto' }}>
           <motion.div
             className="spread-text"
+            style={{ background: 'var(--bg-raised)' }}
             initial={{ opacity: 0, x: -40 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
           >
             <div className="spread-label">Limited Edition</div>
-            <h2 className="spread-title">Racing<br />Collection</h2>
+            <h2 className="spread-title"><GlitchText>Racing Collection</GlitchText></h2>
             <p className="spread-body">
               Vintage acid wash. All-over racing graphics. "Built for Speed. No Limits." — a capsule for those who live in the fast lane.
             </p>
@@ -388,15 +418,15 @@ function HomePage() {
               Shop Racing <ArrowRight size={14} />
             </Link>
           </motion.div>
-          <div className="spread-img">
+          <div className="spread-img glitch-img-wrap">
             <img src="/lifestyle/nyc-convertible-red.png" alt="Racing collection" loading="lazy" />
           </div>
         </div>
       </section>
 
-      {/* SECOND SPREAD — New Arrivals */}
+      {/* SPREAD — New Colorways */}
       <section className="spread">
-        <div className="spread-img">
+        <div className="spread-img glitch-img-wrap">
           <img src="/lifestyle/convertible-pink-red.png" alt="Pink collection" loading="lazy" />
         </div>
         <motion.div
@@ -406,10 +436,10 @@ function HomePage() {
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
         >
-          <div className="spread-label">New Colorways</div>
-          <h2 className="spread-title">Pink &<br />Olive Drops</h2>
+          <div className="spread-label">New Drops</div>
+          <h2 className="spread-title"><GlitchText>Fresh Colorways</GlitchText></h2>
           <p className="spread-body">
-            Fresh colorways, same heavyweight quality. The Pink Collection and Olive & Orange bring new energy to the Shift lineup.
+            Pink Collection and Olive & Orange. New energy, same heavyweight quality. Limited quantities.
           </p>
           <Link to="/shop" className="spread-link">
             Shop New Arrivals <ArrowRight size={14} />
@@ -425,8 +455,8 @@ function HomePage() {
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
         >
-          <div className="newsletter-label">Stay in the Loop</div>
-          <h3 className="newsletter-title">Join the Movement</h3>
+          <div className="newsletter-label">Stay Locked In</div>
+          <h3 className="newsletter-title"><GlitchText>Join the Movement</GlitchText></h3>
           <p className="newsletter-sub">Early access to drops, exclusive colorways, and first dibs on limited editions.</p>
           <form className="newsletter-form" onSubmit={e => e.preventDefault()}>
             <input type="email" placeholder="Your email" />
@@ -446,9 +476,10 @@ function ShopPage() {
 
   return (
     <>
+      <div className="scanlines" />
       <div className="shop-header">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-          <h1 className="shop-title">Shop All</h1>
+          <h1 className="shop-title"><GlitchText>Shop All</GlitchText></h1>
           <div className="shop-filters">
             {collections.map(c => (
               <button
@@ -462,7 +493,6 @@ function ShopPage() {
           </div>
         </motion.div>
       </div>
-
       <div className="shop-grid">
         {filtered.map((p, i) => (
           <ProductCard key={p.id} product={p} index={i} />
@@ -479,7 +509,7 @@ function ProductPage() {
   const [selectedSize, setSelectedSize] = useState(null);
   const { addToCart } = useCart();
 
-  if (!product) return <div style={{ padding: '200px 40px', textAlign: 'center', color: 'var(--text-light)' }}>Product not found</div>;
+  if (!product) return <div style={{ padding: '200px 40px', textAlign: 'center', color: 'var(--gray)' }}>Product not found</div>;
 
   const handleAdd = () => {
     if (!selectedSize) return;
@@ -488,13 +518,10 @@ function ProductPage() {
 
   return (
     <div className="pdp">
+      <div className="scanlines" />
       <div className="pdp-layout">
-        <div>
-          <img
-            className="pdp-gallery-img"
-            src={product.image}
-            alt={product.name}
-          />
+        <div className="glitch-img-wrap">
+          <img className="pdp-gallery-img" src={product.image} alt={product.name} />
         </div>
 
         <motion.div
@@ -507,14 +534,12 @@ function ProductPage() {
             <Link to="/shop">Shop</Link> <ChevronRight size={10} style={{ margin: '0 6px' }} /> {product.category}
           </div>
 
-          {product.badge && (
-            <div className="product-card-badge" style={{ marginBottom: 16 }}>{product.badge}</div>
-          )}
+          {product.badge && <div className="product-card-badge" style={{ marginBottom: 16 }}>{product.badge}</div>}
 
           <h1 className="pdp-name">{product.name}</h1>
           <div className="pdp-price">
             {product.comparePrice && (
-              <span style={{ textDecoration: 'line-through', color: 'var(--text-faint)', marginRight: 12 }}>${product.comparePrice}</span>
+              <span style={{ textDecoration: 'line-through', color: 'var(--gray)', marginRight: 12 }}>${product.comparePrice}</span>
             )}
             ${product.price}
           </div>
@@ -561,10 +586,11 @@ function ProductPage() {
 function CollectionsPage() {
   return (
     <>
+      <div className="scanlines" />
       <div className="shop-header">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-          <h1 className="shop-title">Collections</h1>
-          <p style={{ fontSize: 15, color: 'var(--text-light)', marginTop: 12 }}>Curated drops. Each one tells a story.</p>
+          <h1 className="shop-title"><GlitchText>Collections</GlitchText></h1>
+          <p style={{ fontSize: 15, color: 'var(--gray)', marginTop: 12 }}>Curated drops. Each one tells a story.</p>
         </motion.div>
       </div>
 
@@ -601,7 +627,7 @@ function CollectionsPage() {
 
       <section className="newsletter" style={{ marginTop: 40 }}>
         <div className="newsletter-label">Be First</div>
-        <h3 className="newsletter-title">Get Notified</h3>
+        <h3 className="newsletter-title"><GlitchText>Get Notified</GlitchText></h3>
         <p className="newsletter-sub">Be the first to know when new collections drop.</p>
         <form className="newsletter-form" onSubmit={e => e.preventDefault()}>
           <input type="email" placeholder="Your email" />
@@ -615,10 +641,11 @@ function CollectionsPage() {
 function AboutPage() {
   return (
     <>
+      <div className="scanlines" />
       <div className="shop-header" style={{ paddingBottom: 0 }}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 16 }}>The Story</div>
-          <h1 className="shop-title">Life Keeps Moving</h1>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--red)', marginBottom: 16 }}>The Story</div>
+          <h1 className="shop-title"><GlitchText>Life Keeps Moving</GlitchText></h1>
         </motion.div>
       </div>
 
@@ -648,23 +675,23 @@ function AboutPage() {
       </div>
 
       <section className="spread">
-        <div className="spread-img">
+        <div className="spread-img glitch-img-wrap">
           <img src="/lifestyle/convertible-pink-red.png" alt="Shift lifestyle" loading="lazy" />
         </div>
         <div className="spread-text" style={{ alignItems: 'center', textAlign: 'center' }}>
-          <img src="/shift-logo.png" alt="Shift" style={{ width: 200, marginBottom: 24 }} />
-          <p style={{ fontSize: 15, color: 'var(--text-light)', lineHeight: 1.8 }}>Your Mindset. Your Focus. Your Perspective.</p>
+          <img src="/shift-logo.png" alt="Shift" style={{ width: 200, filter: 'brightness(0) invert(1)', marginBottom: 24 }} />
+          <p style={{ fontSize: 15, color: 'var(--gray)', lineHeight: 1.8 }}>Your Mindset. Your Focus. Your Perspective.</p>
         </div>
       </section>
 
       <div className="photo-grid">
-        <div className="photo-grid-item">
+        <div className="photo-grid-item glitch-img-wrap">
           <img src="/lifestyle/nyc-crosswalk.png" alt="NYC" loading="lazy" />
         </div>
-        <div className="photo-grid-item">
+        <div className="photo-grid-item glitch-img-wrap">
           <img src="/lifestyle/pool-party.png" alt="Pool party" loading="lazy" />
         </div>
-        <div className="photo-grid-item">
+        <div className="photo-grid-item glitch-img-wrap">
           <img src="/lifestyle/street-crossing.png" alt="Street" loading="lazy" />
         </div>
       </div>
