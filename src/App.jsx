@@ -250,7 +250,7 @@ function HomePage() {
       {/* HERO — full-bleed video, bottom-aligned content */}
       <section className="hero">
         <div className="hero-img">
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)' }} />
+          <img src="/lifestyle/street-crossing.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           <video
             src="/videos/shift-hero.mp4"
             autoPlay
@@ -258,7 +258,7 @@ function HomePage() {
             loop
             playsInline
             onLoadedData={() => setHeroLoaded(true)}
-            style={{ opacity: heroLoaded ? 1 : 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            style={{ position: 'absolute', inset: 0, opacity: heroLoaded ? 1 : 0, width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 1s' }}
           />
           <div className="hero-gradient" />
         </div>
@@ -268,8 +268,8 @@ function HomePage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.3 }}
         >
-          <img src="/shift-logo-tagline.png" alt="Shift — Life Keeps Moving" className="hero-logo-img" />
-          <div className="hero-sub">Streetwear for Forward Motion</div>
+          <img src="/shift-logo.jpeg" alt="Shift" className="hero-logo-img" />
+          <div className="hero-sub">Life Keeps Moving</div>
           <Link to="/shop" className="hero-cta">
             Shop the Collection <ArrowRight size={14} />
           </Link>
