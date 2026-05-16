@@ -1,6 +1,6 @@
-import { useState, useEffect, createContext, useContext, useRef } from 'react';
+import { useState, useEffect, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag, Menu, X, ArrowRight, Minus, Plus, ChevronRight } from 'lucide-react';
 import { products, collections } from './data/products';
 
@@ -42,71 +42,23 @@ function ScrollToTop() {
   return null;
 }
 
-function GlitchText({ children, tag: Tag = 'div', className = '' }) {
-  return (
-    <Tag className={`glitch ${className}`} data-text={children}>
-      {children}
-    </Tag>
-  );
-}
-
-function Marquee({ children, reverse = false, speed = 20, dark = true }) {
-  return (
-    <div className={`marquee ${dark ? '' : 'marquee-light'}`}>
-      <div className="marquee-track" style={{ animationDuration: `${speed}s`, animationDirection: reverse ? 'reverse' : 'normal' }}>
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="marquee-item">{children}</div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function HorizontalScroll({ text, speed = 30 }) {
-  return (
-    <div className="hscroll-section">
-      <div className="hscroll-track" style={{ animationDuration: `${speed}s` }}>
-        {[...Array(4)].map((_, i) => (
-          <span key={i} className="hscroll-text">{text}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function VidDivider({ src, title, subtitle, fallbackBg = 'linear-gradient(135deg, #1a1a1a, #2a2a2a)' }) {
-  const [loaded, setLoaded] = useState(false);
+function Ticker() {
+  const items = [
+    'Free Shipping Over $150', 'Heavyweight Premium Cotton', 'Life Keeps Moving',
+    'Oversized Fit', 'Limited Drops', 'Your Mindset Your Focus Your Perspective',
+  ];
 
   return (
-    <div className="vid-divider">
-      <div className="vid-divider-clip">
-        <div style={{ position: 'absolute', inset: 0, background: fallbackBg }} />
-        {src && (
-          <video
-            className="vid-divider-video"
-            src={src}
-            autoPlay
-            muted
-            loop
-            playsInline
-            onLoadedData={() => setLoaded(true)}
-            style={{ opacity: loaded ? 1 : 0 }}
-          />
+    <div className="ticker">
+      <div className="ticker-track">
+        {[...Array(3)].map((_, rep) =>
+          items.map((item, i) => (
+            <span className="ticker-text" key={`${rep}-${i}`}>
+              {item}
+              <span className="ticker-dot" />
+            </span>
+          ))
         )}
-      </div>
-      <div className="vid-divider-overlay-top" />
-      <div className="vid-divider-overlay-bottom" />
-      <div className="vid-divider-content">
-        <motion.div
-          className="vid-divider-box"
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-        >
-          {title && <h2 className="vid-divider-title">{title}</h2>}
-          {subtitle && <p className="vid-divider-sub">{subtitle}</p>}
-        </motion.div>
       </div>
     </div>
   );
@@ -128,7 +80,7 @@ function Header() {
 
   return (
     <>
-      <header className={`site-header ${scrolled ? 'scrolled' : ''}`}>
+      <header className={`header ${scrolled ? 'scrolled' : ''}`}>
         <div className="header-inner">
           <Link to="/" className="header-logo">
             <img src="/shift-logo.jpeg" alt="Shift" className="header-logo-img" />
@@ -141,9 +93,9 @@ function Header() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             <button className="header-cart" onClick={() => setCartOpen(true)}>
               <ShoppingBag size={20} />
-              {cartCount > 0 && <span className="cart-count">{cartCount}</span>}
+              {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
             </button>
-            <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)}>
+            <button className="mobile-toggle" onClick={() => setMobileOpen(true)}>
               <Menu size={24} />
             </button>
           </div>
@@ -154,6 +106,7 @@ function Header() {
         <button className="mobile-nav-close" onClick={() => setMobileOpen(false)}>
           <X size={28} />
         </button>
+        <Link to="/" onClick={() => setMobileOpen(false)}>Home</Link>
         <Link to="/shop" onClick={() => setMobileOpen(false)}>Shop</Link>
         <Link to="/collections" onClick={() => setMobileOpen(false)}>Collections</Link>
         <Link to="/about" onClick={() => setMobileOpen(false)}>About</Link>
@@ -184,7 +137,7 @@ function CartDrawer() {
             <div className="cart-items">
               {cart.map(item => (
                 <div key={item.key} className="cart-item">
-                  <div className="cart-item-img" style={{ background: item.product.colors[0]?.hex === '#0A0A0A' ? '#1a1a1a' : '#e5e0d8' }} />
+                  <img className="cart-item-img" src={item.product.image} alt={item.product.name} style={{ width: 72, height: 90, objectFit: 'cover' }} />
                   <div className="cart-item-info">
                     <div className="cart-item-name">{item.product.name}</div>
                     <div className="cart-item-variant">{item.color} / {item.size}</div>
@@ -198,7 +151,7 @@ function CartDrawer() {
                 </div>
               ))}
             </div>
-            <div className="cart-footer">
+            <div className="cart-footer" style={{ padding: '20px 24px', borderTop: '1px solid var(--gray-200)' }}>
               <div className="cart-total">
                 <span>Total</span>
                 <span>${cartTotal}</span>
@@ -214,12 +167,12 @@ function CartDrawer() {
 
 function Footer() {
   return (
-    <footer className="site-footer">
+    <footer className="footer">
       <div className="footer-inner">
         <div>
           <img src="/shift-logo.jpeg" alt="Shift" className="footer-logo-img" />
-          <p className="footer-brand-desc">
-            Shift your mindset. Shift your focus. Shift your perspective. Life keeps moving.
+          <p className="footer-desc">
+            Your Mindset. Your Focus. Your Perspective. Life keeps moving — and so do we.
           </p>
         </div>
         <div className="footer-col">
@@ -247,9 +200,42 @@ function Footer() {
       </div>
       <div className="footer-bottom">
         <span>&copy; {new Date().getFullYear()} Shift. All rights reserved.</span>
-        <span>Life Keeps Moving →</span>
+        <span>Life Keeps Moving</span>
       </div>
     </footer>
+  );
+}
+
+/* ═══ PRODUCT CARD ═══ */
+
+function ProductCard({ product, index }) {
+  const navigate = useNavigate();
+  return (
+    <motion.div
+      className="product-card"
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5, delay: index * 0.06 }}
+      onClick={() => navigate(`/product/${product.id}`)}
+    >
+      <img
+        className="product-card-img"
+        src={product.image}
+        alt={product.name}
+        loading="lazy"
+      />
+      {product.badge && (
+        <div className="product-card-badge">{product.badge}</div>
+      )}
+      <div className="product-card-name">{product.name}</div>
+      <div className="product-card-price">
+        {product.comparePrice && (
+          <span style={{ textDecoration: 'line-through', color: 'var(--text-faint)', marginRight: 8 }}>${product.comparePrice}</span>
+        )}
+        ${product.price}
+      </div>
+    </motion.div>
   );
 }
 
@@ -261,270 +247,177 @@ function HomePage() {
 
   return (
     <>
-      {/* ── HERO ── */}
+      {/* HERO — full-bleed video, bottom-aligned content */}
       <section className="hero">
-        <div className="hero-bg">
-          <div className="hero-fallback-bg" />
+        <div className="hero-img">
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)' }} />
           <video
-            className="hero-video-bg"
             src="/videos/shift-hero.mp4"
             autoPlay
             muted
             loop
             playsInline
             onLoadedData={() => setHeroLoaded(true)}
-            style={{ opacity: heroLoaded ? 1 : 0 }}
+            style={{ opacity: heroLoaded ? 1 : 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
+          <div className="hero-gradient" />
         </div>
-        <div className="hero-scanlines" />
         <motion.div
-          className="hero-content"
-          initial={{ opacity: 0, y: 40 }}
+          className="hero-inner"
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.3 }}
         >
           <img src="/shift-logo-tagline.png" alt="Shift — Life Keeps Moving" className="hero-logo-img" />
+          <div className="hero-sub">Streetwear for Forward Motion</div>
           <Link to="/shop" className="hero-cta">
-            Shop Now <ArrowRight size={14} />
+            Shop the Collection <ArrowRight size={14} />
           </Link>
         </motion.div>
-        <div className="hero-scroll">
-          <span>Scroll</span>
-          <div className="hero-scroll-line" />
-        </div>
       </section>
 
-      {/* ── MARQUEE 1 ── */}
-      <Marquee speed={18}>
-        <span>Your Mindset</span><div className="marquee-dot" />
-        <span>Your Focus</span><div className="marquee-dot" />
-        <span>Your Perspective</span><div className="marquee-dot" />
-        <span>Life Keeps Moving</span><div className="marquee-dot" />
-        <span>Keep Pushing</span><div className="marquee-dot" />
-        <span>Shift Forward</span><div className="marquee-dot" />
-      </Marquee>
+      {/* TICKER */}
+      <Ticker />
 
-      {/* ── GLITCH TEXT SECTION ── */}
-      <section className="glitch-section">
+      {/* EDITORIAL INTRO */}
+      <motion.section
+        className="intro"
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.8 }}
+      >
+        <div className="intro-label">The Brand</div>
+        <h2 className="intro-headline">
+          More than apparel. A mindset. A movement. A daily reminder to keep pushing forward.
+        </h2>
+        <p className="intro-body">
+          Every piece we create carries the energy of forward motion. Heavyweight, premium, built to last — designed for people who move with intention, not distraction. The arrow only points one direction.
+        </p>
+      </motion.section>
+
+      {/* SPREAD — Image Left, Text Right */}
+      <section className="spread">
+        <div className="spread-img">
+          <img src="/lifestyle/street-crossing.png" alt="Shift on the streets" loading="lazy" />
+        </div>
         <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          whileInView={{ opacity: 1, scale: 1 }}
+          className="spread-text"
+          initial={{ opacity: 0, x: 40 }}
+          whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
+          transition={{ duration: 0.7 }}
         >
-          <GlitchText className="glitch-hero-text">LIFE KEEPS</GlitchText>
-          <GlitchText className="glitch-hero-text glitch-outline">MOVING→</GlitchText>
+          <div className="spread-label">Essentials</div>
+          <h2 className="spread-title">Built for<br />the Move</h2>
+          <p className="spread-body">
+            400gsm heavyweight cotton. Oversized, relaxed cuts. Pre-shrunk fleece that holds its shape wear after wear. This isn't fast fashion — it's built to last.
+          </p>
+          <Link to="/shop" className="spread-link">
+            Shop Essentials <ArrowRight size={14} />
+          </Link>
         </motion.div>
       </section>
 
-      {/* ── MARQUEE 2 (reverse, faster) ── */}
-      <Marquee speed={12} reverse>
-        <span>Built Different</span><div className="marquee-dot" />
-        <span>No Reverse</span><div className="marquee-dot" />
-        <span>Stay Locked In</span><div className="marquee-dot" />
-        <span>Forward Only</span><div className="marquee-dot" />
-        <span>shift→</span><div className="marquee-dot" />
-        <span>Never Stop</span><div className="marquee-dot" />
-      </Marquee>
+      {/* PULLQUOTE */}
+      <motion.section
+        className="pullquote"
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.8 }}
+      >
+        <p className="pullquote-text">
+          "The arrow only points one direction — <em>forward</em>. There is no reverse, no pause button, no going back."
+        </p>
+      </motion.section>
 
-      {/* ── FEATURED PRODUCTS ── */}
-      <section className="section section-cream">
-        <div className="container">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7 }}
-          >
-            <div className="section-label">New Arrivals</div>
-            <div style={{ display: 'flex', alignItems: 'end', justifyContent: 'space-between', marginBottom: 48 }}>
-              <h2 className="section-title" style={{ marginBottom: 0 }}>The Collection</h2>
-              <Link to="/shop" style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 8 }}>
-                View All <ArrowRight size={14} />
-              </Link>
-            </div>
-          </motion.div>
-          <div className="products-grid">
-            {featured.map((p, i) => (
-              <ProductCard key={p.id} product={p} index={i} />
-            ))}
-          </div>
+      {/* PRODUCT GRID */}
+      <section className="products-section">
+        <div className="products-header">
+          <h2 className="products-title">The Collection</h2>
+          <Link to="/shop" className="products-link">
+            View All <ArrowRight size={14} />
+          </Link>
+        </div>
+        <div className="products-grid">
+          {featured.map((p, i) => (
+            <ProductCard key={p.id} product={p} index={i} />
+          ))}
         </div>
       </section>
 
-      {/* ── HORIZONTAL SCROLL TEXT ── */}
-      <HorizontalScroll text="SHIFT YOUR PERSPECTIVE →" speed={25} />
-
-      {/* ── VIDEO DIVIDER 1 ── */}
-      <VidDivider
-        src="/videos/shift-motion.mp4"
-        title="Keep Moving Forward"
-        subtitle="Built for those who refuse to stand still"
-      />
-
-      {/* ── SPLIT IMAGE + GLITCH QUOTE ── */}
-      <section className="split-section">
-        <div className="split-image">
-          <img src="/lifestyle/nyc-convertible-red.png" alt="Shift NYC" loading="lazy" />
-          <div className="split-image-glitch" />
+      {/* PHOTO GRID */}
+      <div className="photo-grid">
+        <div className="photo-grid-item tall">
+          <img src="/lifestyle/chinatown.jpg" alt="Shift Chinatown" loading="lazy" />
         </div>
-        <div className="split-text">
-          <motion.div
-            initial={{ opacity: 0, x: 60 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-          >
-            <GlitchText className="split-quote">NO REVERSE</GlitchText>
-            <p className="split-sub">The arrow only points one direction. There is no going back. There is no standing still. There is only forward.</p>
-            <Link to="/shop" className="split-cta">Shop the Drop <ArrowRight size={14} /></Link>
-          </motion.div>
+        <div className="photo-grid-item">
+          <img src="/lifestyle/nyc-convertible.png" alt="Shift NYC" loading="lazy" />
         </div>
-      </section>
-
-      {/* ── HORIZONTAL SCROLL TEXT (reverse) ── */}
-      <div style={{ background: 'var(--cream)' }}>
-        <HorizontalScroll text="YOUR MINDSET YOUR FOCUS YOUR PERSPECTIVE →" speed={35} />
+        <div className="photo-grid-item">
+          <img src="/lifestyle/car-meet.png" alt="Shift car meet" loading="lazy" />
+        </div>
+        <div className="photo-grid-item">
+          <img src="/lifestyle/coffee-shop.png" alt="Shift coffee" loading="lazy" />
+        </div>
+        <div className="photo-grid-item tall">
+          <img src="/lifestyle/nyc-crosswalk.png" alt="Shift crosswalk" loading="lazy" />
+        </div>
+        <div className="photo-grid-item">
+          <img src="/lifestyle/pool-party.png" alt="Shift poolside" loading="lazy" />
+        </div>
       </div>
 
-      {/* ── LOOKBOOK GRID ── */}
-      <section className="lookbook-section">
-        <div className="lookbook-grid">
-          <motion.div className="lookbook-item lookbook-tall" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-            <img src="/lifestyle/street-crossing.png" alt="Shift street style" loading="lazy" />
-          </motion.div>
-          <motion.div className="lookbook-item" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}>
-            <img src="/lifestyle/nyc-convertible.png" alt="Shift NYC" loading="lazy" />
-          </motion.div>
-          <motion.div className="lookbook-item" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.2 }}>
-            <img src="/lifestyle/car-meet.png" alt="Shift car meet" loading="lazy" />
-          </motion.div>
-          <motion.div className="lookbook-item lookbook-tall" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.15 }}>
-            <img src="/lifestyle/chinatown.jpg" alt="Shift Chinatown" loading="lazy" />
-          </motion.div>
-          <motion.div className="lookbook-item" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.25 }}>
-            <img src="/lifestyle/subway.png" alt="Shift subway" loading="lazy" />
-          </motion.div>
-          <motion.div className="lookbook-item" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.3 }}>
-            <img src="/lifestyle/coffee-shop.png" alt="Shift coffee shop" loading="lazy" />
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── MARQUEE 3 (big, cream) ── */}
-      <Marquee speed={15} dark={false}>
-        <span>SHIFT→</span><div className="marquee-dot" />
-        <span>KEEP MOVING</span><div className="marquee-dot" />
-        <span>SHIFT→</span><div className="marquee-dot" />
-        <span>KEEP MOVING</span><div className="marquee-dot" />
-        <span>SHIFT→</span><div className="marquee-dot" />
-        <span>KEEP MOVING</span><div className="marquee-dot" />
-      </Marquee>
-
-      {/* ── VIDEO DIVIDER 2 ── */}
-      <VidDivider
-        src="/videos/shift-racing.mp4"
-        title="Racing Collection"
-        subtitle="Limited Edition — Built for Speed. No Limits."
-      />
-
-      {/* ── FULL BLEED IMAGE WITH GLITCH ── */}
-      <section className="fullbleed-section">
-        <div className="fullbleed-img-wrap">
-          <img src="/lifestyle/convertible-pink-red.png" alt="Shift lifestyle" loading="lazy" />
-          <div className="fullbleed-glitch-overlay" />
-        </div>
-        <div className="fullbleed-text">
+      {/* DARK SECTION — Reverse Spread */}
+      <section className="dark-section">
+        <div className="spread spread-reverse" style={{ minHeight: 'auto' }}>
           <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-          >
-            <GlitchText className="fullbleed-title">BUILT DIFFERENT</GlitchText>
-            <p className="fullbleed-sub">Premium heavyweight. Oversized fit. Made for those who don't follow — they lead.</p>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── STATS SECTION ── */}
-      <section className="stats-section">
-        <div className="container">
-          <div className="stats-grid">
-            {[
-              { number: '400', unit: 'GSM', label: 'Heavyweight cotton' },
-              { number: '100', unit: '%', label: 'Premium materials' },
-              { number: '∞', unit: '', label: 'Forward momentum' },
-              { number: '0', unit: '', label: 'Reasons to look back' },
-            ].map((s, i) => (
-              <motion.div
-                key={i}
-                className="stat-item"
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-              >
-                <div className="stat-number">{s.number}<span className="stat-unit">{s.unit}</span></div>
-                <div className="stat-label">{s.label}</div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── HORIZONTAL SCROLL TEXT 3 ── */}
-      <HorizontalScroll text="FORWARD ONLY → FORWARD ONLY →" speed={20} />
-
-      {/* ── WHY SHIFT ── */}
-      <section className="section section-cream">
-        <div className="container">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            className="spread-text"
+            initial={{ opacity: 0, x: -40 }}
+            whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
           >
-            <div className="section-label">The Brand</div>
-            <h2 className="section-title">Why Shift?</h2>
-            <p className="section-subtitle">
-              More than apparel. A mindset. A movement. A daily reminder to keep pushing forward.
+            <div className="spread-label">Limited Edition</div>
+            <h2 className="spread-title">Racing<br />Collection</h2>
+            <p className="spread-body">
+              Vintage acid wash. All-over racing graphics. "Built for Speed. No Limits." — a capsule for those who live in the fast lane.
             </p>
+            <Link to="/product/shift-racing-tee" className="spread-link">
+              Shop Racing <ArrowRight size={14} />
+            </Link>
           </motion.div>
-          <div className="values-grid">
-            {[
-              { num: '01', title: 'Your Mindset', desc: 'What you think becomes who you are. Shift starts in the mind — choosing growth over comfort, action over hesitation.' },
-              { num: '02', title: 'Your Focus', desc: 'Cut the noise. Lock in on what matters. Every piece is designed for people who move with intention, not distraction.' },
-              { num: '03', title: 'Your Perspective', desc: 'See the world differently. The arrow only points forward — there is no reverse. Embrace the shift and keep moving.' },
-            ].map((v, i) => (
-              <motion.div
-                key={v.num}
-                className="value-item"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.15 }}
-              >
-                <div className="value-number">{v.num}</div>
-                <div className="value-title">{v.title}</div>
-                <div className="value-desc">{v.desc}</div>
-              </motion.div>
-            ))}
+          <div className="spread-img">
+            <img src="/lifestyle/nyc-convertible-red.png" alt="Racing collection" loading="lazy" />
           </div>
         </div>
       </section>
 
-      {/* ── MARQUEE 4 (final, dark, big) ── */}
-      <Marquee speed={22} reverse>
-        <span>LIFE KEEPS MOVING</span><div className="marquee-dot" />
-        <span>SHIFT→</span><div className="marquee-dot" />
-        <span>LIFE KEEPS MOVING</span><div className="marquee-dot" />
-        <span>SHIFT→</span><div className="marquee-dot" />
-        <span>LIFE KEEPS MOVING</span><div className="marquee-dot" />
-        <span>SHIFT→</span><div className="marquee-dot" />
-      </Marquee>
+      {/* SECOND SPREAD — New Arrivals */}
+      <section className="spread">
+        <div className="spread-img">
+          <img src="/lifestyle/convertible-pink-red.png" alt="Pink collection" loading="lazy" />
+        </div>
+        <motion.div
+          className="spread-text"
+          initial={{ opacity: 0, x: 40 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.7 }}
+        >
+          <div className="spread-label">New Colorways</div>
+          <h2 className="spread-title">Pink &<br />Olive Drops</h2>
+          <p className="spread-body">
+            Fresh colorways, same heavyweight quality. The Pink Collection and Olive & Orange bring new energy to the Shift lineup.
+          </p>
+          <Link to="/shop" className="spread-link">
+            Shop New Arrivals <ArrowRight size={14} />
+          </Link>
+        </motion.div>
+      </section>
 
-      {/* ── NEWSLETTER ── */}
+      {/* NEWSLETTER */}
       <section className="newsletter">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -532,7 +425,8 @@ function HomePage() {
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
         >
-          <GlitchText className="newsletter-title">Join the Movement</GlitchText>
+          <div className="newsletter-label">Stay in the Loop</div>
+          <h3 className="newsletter-title">Join the Movement</h3>
           <p className="newsletter-sub">Early access to drops, exclusive colorways, and first dibs on limited editions.</p>
           <form className="newsletter-form" onSubmit={e => e.preventDefault()}>
             <input type="email" placeholder="Your email" />
@@ -544,47 +438,6 @@ function HomePage() {
   );
 }
 
-function ProductCard({ product, index }) {
-  const navigate = useNavigate();
-  return (
-    <motion.div
-      className="product-card"
-      initial={{ opacity: 0 }}
-      whileInView={{ opacity: 1 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.5, delay: index * 0.08 }}
-      onClick={() => navigate(`/product/${product.id}`)}
-    >
-      <img
-        className="product-card-img"
-        src={product.image}
-        alt={product.name}
-        loading="lazy"
-      />
-      {product.badge && (
-        <div style={{
-          position: 'absolute', top: 16, left: 16,
-          background: product.badge === 'Limited' ? '#8B0000' : 'var(--black)',
-          color: 'var(--cream)', fontSize: 10, fontWeight: 700,
-          letterSpacing: '0.1em', textTransform: 'uppercase',
-          padding: '6px 12px',
-        }}>
-          {product.badge}
-        </div>
-      )}
-      <div className="product-card-overlay">
-        <div className="product-card-name">{product.name}</div>
-        <div className="product-card-price">
-          {product.comparePrice && (
-            <span style={{ textDecoration: 'line-through', opacity: 0.5, marginRight: 8 }}>${product.comparePrice}</span>
-          )}
-          ${product.price}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
 function ShopPage() {
   const [activeFilter, setActiveFilter] = useState('all');
   const filtered = collections.find(c => c.id === activeFilter)?.filter
@@ -592,42 +445,30 @@ function ShopPage() {
     : products;
 
   return (
-    <div style={{ paddingTop: 80, background: 'var(--cream)', minHeight: '100vh' }}>
-      <section className="section section-cream" style={{ paddingBottom: 40 }}>
-        <div className="container">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <h1 className="section-title">Shop All</h1>
-          </motion.div>
-          <div style={{ display: 'flex', gap: 24, marginTop: 24, flexWrap: 'wrap' }}>
+    <>
+      <div className="shop-header">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+          <h1 className="shop-title">Shop All</h1>
+          <div className="shop-filters">
             {collections.map(c => (
               <button
                 key={c.id}
+                className={`filter-btn ${activeFilter === c.id ? 'active' : ''}`}
                 onClick={() => setActiveFilter(c.id)}
-                style={{
-                  fontSize: 12, fontWeight: activeFilter === c.id ? 700 : 500,
-                  letterSpacing: '0.1em', textTransform: 'uppercase',
-                  color: activeFilter === c.id ? 'var(--black)' : 'var(--gray-400)',
-                  borderBottom: activeFilter === c.id ? '2px solid var(--black)' : '2px solid transparent',
-                  paddingBottom: 8, transition: 'all 0.2s',
-                }}
               >
                 {c.name}
               </button>
             ))}
           </div>
-        </div>
-      </section>
+        </motion.div>
+      </div>
 
-      <section style={{ padding: '0 40px 120px' }}>
-        <div className="container">
-          <div className="products-grid">
-            {filtered.map((p, i) => (
-              <ProductCard key={p.id} product={p} index={i} />
-            ))}
-          </div>
-        </div>
-      </section>
-    </div>
+      <div className="shop-grid">
+        {filtered.map((p, i) => (
+          <ProductCard key={p.id} product={p} index={i} />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -638,7 +479,7 @@ function ProductPage() {
   const [selectedSize, setSelectedSize] = useState(null);
   const { addToCart } = useCart();
 
-  if (!product) return <div style={{ padding: '200px 40px', textAlign: 'center' }}>Product not found</div>;
+  if (!product) return <div style={{ padding: '200px 40px', textAlign: 'center', color: 'var(--text-light)' }}>Product not found</div>;
 
   const handleAdd = () => {
     if (!selectedSize) return;
@@ -646,49 +487,42 @@ function ProductPage() {
   };
 
   return (
-    <div className="product-page">
-      <div className="product-layout">
-        <div className="product-gallery">
+    <div className="pdp">
+      <div className="pdp-layout">
+        <div>
           <img
-            className="product-gallery-img full"
+            className="pdp-gallery-img"
             src={product.image}
             alt={product.name}
           />
         </div>
 
         <motion.div
-          className="product-info"
+          className="pdp-info"
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <div className="product-breadcrumb">
+          <div className="pdp-breadcrumb">
             <Link to="/shop">Shop</Link> <ChevronRight size={10} style={{ margin: '0 6px' }} /> {product.category}
           </div>
 
           {product.badge && (
-            <div style={{
-              display: 'inline-block', background: product.badge === 'Limited' ? '#8B0000' : 'var(--black)',
-              color: 'var(--cream)', fontSize: 10, fontWeight: 700,
-              letterSpacing: '0.1em', textTransform: 'uppercase',
-              padding: '5px 12px', marginBottom: 16,
-            }}>
-              {product.badge}
-            </div>
+            <div className="product-card-badge" style={{ marginBottom: 16 }}>{product.badge}</div>
           )}
 
-          <h1 className="product-name">{product.name}</h1>
-          <div className="product-price">
+          <h1 className="pdp-name">{product.name}</h1>
+          <div className="pdp-price">
             {product.comparePrice && (
-              <span style={{ textDecoration: 'line-through', color: 'var(--gray-400)', marginRight: 12 }}>${product.comparePrice}</span>
+              <span style={{ textDecoration: 'line-through', color: 'var(--text-faint)', marginRight: 12 }}>${product.comparePrice}</span>
             )}
             ${product.price}
           </div>
-          <p className="product-desc">{product.description}</p>
+          <p className="pdp-desc">{product.description}</p>
 
           {product.colors.length > 1 && (
             <>
-              <div className="option-label">Color — {product.colors[selectedColor].name}</div>
+              <div className="pdp-label">Color — {product.colors[selectedColor].name}</div>
               <div className="color-options">
                 {product.colors.map((c, i) => (
                   <button
@@ -702,7 +536,7 @@ function ProductPage() {
             </>
           )}
 
-          <div className="option-label">Size</div>
+          <div className="pdp-label">Size</div>
           <div className="size-options">
             {product.sizes.map(s => (
               <button
@@ -715,7 +549,7 @@ function ProductPage() {
             ))}
           </div>
 
-          <button className="add-to-cart" onClick={handleAdd} disabled={!selectedSize} style={{ opacity: selectedSize ? 1 : 0.5 }}>
+          <button className="add-btn" onClick={handleAdd} style={{ opacity: selectedSize ? 1 : 0.5 }}>
             {selectedSize ? 'Add to Cart' : 'Select a Size'} <ArrowRight size={14} />
           </button>
         </motion.div>
@@ -726,92 +560,115 @@ function ProductPage() {
 
 function CollectionsPage() {
   return (
-    <div style={{ paddingTop: 80, background: 'var(--cream)', minHeight: '100vh' }}>
-      <section className="section section-cream">
-        <div className="container">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <h1 className="section-title">Collections</h1>
-            <p className="section-subtitle">Curated drops. Each one tells a story.</p>
-          </motion.div>
-        </div>
-      </section>
+    <>
+      <div className="shop-header">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+          <h1 className="shop-title">Collections</h1>
+          <p style={{ fontSize: 15, color: 'var(--text-light)', marginTop: 12 }}>Curated drops. Each one tells a story.</p>
+        </motion.div>
+      </div>
 
-      <div className="editorial-grid" style={{ margin: '0 40px' }}>
-        <Link to="/shop" className="editorial-block collection-link">
-          <img src="/lifestyle/pizza-shop.png" alt="Essentials collection" loading="lazy" />
-          <div className="collection-link-overlay">
-            <div style={{ fontSize: 14, letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.5, marginBottom: 12 }}>Core</div>
-            <div style={{ fontSize: 48, fontWeight: 900, letterSpacing: -1 }}>Essentials</div>
+      <div className="collections-grid">
+        <Link to="/shop" className="collection-card">
+          <img src="/lifestyle/pizza-shop.png" alt="Essentials" loading="lazy" />
+          <div className="collection-card-overlay">
+            <div className="collection-card-label">Core</div>
+            <div className="collection-card-title">Essentials</div>
           </div>
         </Link>
-        <Link to="/shop" className="editorial-block collection-link">
-          <img src="/lifestyle/car-meet.png" alt="Racing collection" loading="lazy" />
-          <div className="collection-link-overlay">
-            <div style={{ fontSize: 14, letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.5, marginBottom: 12 }}>Limited</div>
-            <div style={{ fontSize: 48, fontWeight: 900, letterSpacing: -1 }}>Racing</div>
+        <Link to="/shop" className="collection-card">
+          <img src="/lifestyle/car-meet.png" alt="Racing" loading="lazy" />
+          <div className="collection-card-overlay">
+            <div className="collection-card-label">Limited</div>
+            <div className="collection-card-title">Racing</div>
+          </div>
+        </Link>
+        <Link to="/shop" className="collection-card">
+          <img src="/lifestyle/convertible-pink-red.png" alt="New arrivals" loading="lazy" />
+          <div className="collection-card-overlay">
+            <div className="collection-card-label">New</div>
+            <div className="collection-card-title">Fresh Drops</div>
+          </div>
+        </Link>
+        <Link to="/shop" className="collection-card">
+          <img src="/lifestyle/subway.png" alt="City series" loading="lazy" />
+          <div className="collection-card-overlay">
+            <div className="collection-card-label">Vintage</div>
+            <div className="collection-card-title">City Series</div>
           </div>
         </Link>
       </div>
 
-      <section className="newsletter" style={{ marginTop: 80 }}>
-        <GlitchText className="newsletter-title">Get Notified</GlitchText>
+      <section className="newsletter" style={{ marginTop: 40 }}>
+        <div className="newsletter-label">Be First</div>
+        <h3 className="newsletter-title">Get Notified</h3>
         <p className="newsletter-sub">Be the first to know when new collections drop.</p>
         <form className="newsletter-form" onSubmit={e => e.preventDefault()}>
           <input type="email" placeholder="Your email" />
           <button type="submit">Notify Me</button>
         </form>
       </section>
-    </div>
+    </>
   );
 }
 
 function AboutPage() {
   return (
-    <div style={{ paddingTop: 80, background: 'var(--cream)', minHeight: '100vh' }}>
-      <section className="section section-cream">
-        <div className="container" style={{ maxWidth: 700 }}>
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <div className="section-label">The Story</div>
-            <h1 className="section-title">Life Keeps Moving</h1>
-            <div style={{ fontSize: 16, lineHeight: 2, color: 'var(--gray-600)' }}>
-              <p style={{ marginBottom: 24 }}>
-                Shift was born from a simple truth: life doesn't wait. The arrow in our logo only points one direction — forward. There is no reverse, no pause button, no going back.
-              </p>
-              <p style={{ marginBottom: 24 }}>
-                We make clothes for people who move. Not just physically, but mentally. People who are shifting their mindset, sharpening their focus, and changing their perspective on what's possible.
-              </p>
-              <p style={{ marginBottom: 24 }}>
-                Every piece we create carries that energy. Heavyweight, premium, built to last — because the journey doesn't end after one wear. Our designs are rooted in movement: roads, speed, direction, purpose.
-              </p>
-              <p>
-                This isn't just streetwear. It's a daily reminder. Shift your mindset. Shift your focus. Shift your perspective. And keep moving forward.
-              </p>
-            </div>
-          </motion.div>
+    <>
+      <div className="shop-header" style={{ paddingBottom: 0 }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 16 }}>The Story</div>
+          <h1 className="shop-title">Life Keeps Moving</h1>
+        </motion.div>
+      </div>
+
+      <motion.section
+        className="intro"
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.8 }}
+        style={{ paddingTop: 60 }}
+      >
+        <p className="intro-body">
+          Shift was born from a simple truth: life doesn't wait. The arrow in our logo only points one direction — forward. There is no reverse, no pause button, no going back.
+        </p>
+        <p className="intro-body" style={{ marginTop: 24 }}>
+          We make clothes for people who move. Not just physically, but mentally. People who are shifting their mindset, sharpening their focus, and changing their perspective on what's possible.
+        </p>
+        <p className="intro-body" style={{ marginTop: 24 }}>
+          Every piece we create carries that energy. Heavyweight, premium, built to last — because the journey doesn't end after one wear. Our designs are rooted in movement: roads, speed, direction, purpose.
+        </p>
+      </motion.section>
+
+      <div className="pullquote">
+        <p className="pullquote-text">
+          "This isn't just streetwear. It's a daily reminder. Shift your mindset. Shift your focus. Shift your perspective. <em>And keep moving forward.</em>"
+        </p>
+      </div>
+
+      <section className="spread">
+        <div className="spread-img">
+          <img src="/lifestyle/convertible-pink-red.png" alt="Shift lifestyle" loading="lazy" />
+        </div>
+        <div className="spread-text" style={{ alignItems: 'center', textAlign: 'center' }}>
+          <img src="/shift-logo.jpeg" alt="Shift" style={{ width: 200, marginBottom: 24 }} />
+          <p style={{ fontSize: 15, color: 'var(--text-light)', lineHeight: 1.8 }}>Your Mindset. Your Focus. Your Perspective.</p>
         </div>
       </section>
 
-      <HorizontalScroll text="SHIFT YOUR PERSPECTIVE →" speed={30} />
-
-      <div className="editorial-grid">
-        <div className="editorial-text">
-          <img src="/shift-logo.jpeg" alt="Shift" style={{ width: 200, filter: 'invert(1)', mixBlendMode: 'screen', marginBottom: 24 }} />
-          <div className="editorial-quote-sub">Your Mindset. Your Focus. Your Perspective.</div>
+      <div className="photo-grid">
+        <div className="photo-grid-item">
+          <img src="/lifestyle/nyc-crosswalk.png" alt="NYC" loading="lazy" />
         </div>
-        <div className="editorial-block">
-          <img src="/lifestyle/convertible-pink-red.png" alt="Shift lifestyle" loading="lazy" />
+        <div className="photo-grid-item">
+          <img src="/lifestyle/pool-party.png" alt="Pool party" loading="lazy" />
         </div>
-      </div>
-
-      <div className="editorial-grid">
-        <div className="editorial-block">
-          <img src="/lifestyle/nyc-crosswalk.png" alt="Shift NYC" loading="lazy" />
-        </div>
-        <div className="editorial-block">
-          <img src="/lifestyle/pool-party.png" alt="Shift pool party" loading="lazy" />
+        <div className="photo-grid-item">
+          <img src="/lifestyle/street-crossing.png" alt="Street" loading="lazy" />
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
