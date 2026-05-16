@@ -1085,7 +1085,152 @@ img { max-width: 100%; display: block; }
   color: var(--gray); font-size: 14px;
 }
 
-/* ═══ COLLECTIONS PAGE ═══ */
+/* ═══ BULLETIN BOARD ═══ */
+@keyframes swing {
+  0%, 100% { transform: rotate(var(--rot)) translateY(0); }
+  25% { transform: rotate(calc(var(--rot) + 1.5deg)) translateY(-2px); }
+  50% { transform: rotate(calc(var(--rot) - 1deg)) translateY(0); }
+  75% { transform: rotate(calc(var(--rot) + 0.5deg)) translateY(-1px); }
+}
+
+.board {
+  padding: 0 40px 80px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.board-inner {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 48px 36px;
+  padding: 60px 40px;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(229,0,0,0.03) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(229,0,0,0.02) 0%, transparent 50%),
+    var(--bg-raised);
+  border: 1px solid var(--gray-dim);
+  border-radius: 2px;
+  box-shadow: inset 0 0 80px rgba(0,0,0,0.4);
+}
+
+.pin-card {
+  position: relative;
+  transform-origin: top center;
+  transform: rotate(var(--rot));
+  animation: swing 4s ease-in-out infinite;
+  animation-delay: var(--delay);
+  transition: transform 0.4s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pin-card:hover {
+  animation-play-state: paused;
+  transform: rotate(0deg) scale(1.05);
+  z-index: 10;
+}
+
+.pin {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 18px;
+  background: var(--red);
+  border-radius: 50%;
+  z-index: 3;
+  box-shadow:
+    0 0 8px rgba(229,0,0,0.6),
+    inset 0 -2px 3px rgba(0,0,0,0.3),
+    inset 0 1px 2px rgba(255,255,255,0.2);
+}
+
+.pin::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  width: 5px;
+  height: 5px;
+  background: rgba(255,255,255,0.4);
+  border-radius: 50%;
+}
+
+.pin-shadow {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 6px;
+  background: rgba(0,0,0,0.4);
+  border-radius: 50%;
+  filter: blur(3px);
+  z-index: 2;
+}
+
+.pin-photo {
+  width: 100%;
+  background: var(--bg-card);
+  padding: 10px 10px 0;
+  box-shadow:
+    0 4px 20px rgba(0,0,0,0.5),
+    0 1px 3px rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.04);
+  overflow: hidden;
+}
+
+.pin-photo img {
+  width: 100%;
+  aspect-ratio: 4/5;
+  object-fit: cover;
+  filter: saturate(0.8) contrast(1.1);
+  transition: all 0.4s ease;
+}
+
+.pin-card:hover .pin-photo img {
+  filter: saturate(1) contrast(1.05);
+}
+
+.pin-card:hover .pin-photo {
+  box-shadow:
+    0 8px 30px rgba(229,0,0,0.15),
+    0 4px 20px rgba(0,0,0,0.5);
+}
+
+.pin-label {
+  width: 100%;
+  background: var(--bg-card);
+  padding: 12px 10px 14px;
+  border: 1px solid rgba(255,255,255,0.04);
+  border-top: none;
+  box-shadow:
+    0 4px 20px rgba(0,0,0,0.5),
+    0 1px 3px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pin-label-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--red);
+}
+
+.pin-label-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--white);
+  letter-spacing: -0.3px;
+}
+
+/* ═══ COLLECTIONS PAGE (legacy, kept for reference) ═══ */
 .collections-grid {
   max-width: 1440px;
   margin: 0 auto;
@@ -1186,6 +1331,8 @@ img { max-width: 100%; display: block; }
 
   .collections-grid { grid-template-columns: 1fr; }
 
+  .board-inner { grid-template-columns: repeat(2, 1fr); gap: 40px 24px; padding: 40px 24px; }
+
   .marquee-item { font-size: clamp(36px, 6vw, 60px); }
 }
 
@@ -1213,6 +1360,10 @@ img { max-width: 100%; display: block; }
 
   .shop-header { padding: 120px 20px 40px; }
   .shop-grid { padding: 0 20px 80px; }
+
+  .board { padding: 0 20px 60px; }
+  .board-inner { grid-template-columns: repeat(2, 1fr); gap: 32px 16px; padding: 28px 16px; }
+  .pin-label-title { font-size: 13px; }
 
   .marquee-item { font-size: clamp(28px, 10vw, 48px); }
 }

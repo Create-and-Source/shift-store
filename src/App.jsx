@@ -584,6 +584,15 @@ function ProductPage() {
 }
 
 function CollectionsPage() {
+  const boards = [
+    { img: '/lifestyle/pizza-shop.png', label: 'Core', title: 'Essentials', rot: -3 },
+    { img: '/lifestyle/car-meet.png', label: 'Limited', title: 'Racing', rot: 2.5 },
+    { img: '/lifestyle/convertible-pink-red.png', label: 'New', title: 'Fresh Drops', rot: -1.5 },
+    { img: '/lifestyle/subway.png', label: 'Vintage', title: 'City Series', rot: 4 },
+    { img: '/lifestyle/chinatown.jpg', label: 'Street', title: 'Chinatown', rot: -2 },
+    { img: '/lifestyle/nyc-crosswalk.png', label: 'Lifestyle', title: 'NYC', rot: 3 },
+  ];
+
   return (
     <>
       <div className="scanlines" />
@@ -594,35 +603,30 @@ function CollectionsPage() {
         </motion.div>
       </div>
 
-      <div className="collections-grid">
-        <Link to="/shop" className="collection-card">
-          <img src="/lifestyle/pizza-shop.png" alt="Essentials" loading="lazy" />
-          <div className="collection-card-overlay">
-            <div className="collection-card-label">Core</div>
-            <div className="collection-card-title">Essentials</div>
-          </div>
-        </Link>
-        <Link to="/shop" className="collection-card">
-          <img src="/lifestyle/car-meet.png" alt="Racing" loading="lazy" />
-          <div className="collection-card-overlay">
-            <div className="collection-card-label">Limited</div>
-            <div className="collection-card-title">Racing</div>
-          </div>
-        </Link>
-        <Link to="/shop" className="collection-card">
-          <img src="/lifestyle/convertible-pink-red.png" alt="New arrivals" loading="lazy" />
-          <div className="collection-card-overlay">
-            <div className="collection-card-label">New</div>
-            <div className="collection-card-title">Fresh Drops</div>
-          </div>
-        </Link>
-        <Link to="/shop" className="collection-card">
-          <img src="/lifestyle/subway.png" alt="City series" loading="lazy" />
-          <div className="collection-card-overlay">
-            <div className="collection-card-label">Vintage</div>
-            <div className="collection-card-title">City Series</div>
-          </div>
-        </Link>
+      <div className="board">
+        <div className="board-inner">
+          {boards.map((b, i) => (
+            <Link
+              to="/shop"
+              key={i}
+              className="pin-card"
+              style={{
+                '--rot': `${b.rot}deg`,
+                '--delay': `${i * 0.4}s`,
+              }}
+            >
+              <div className="pin" />
+              <div className="pin-shadow" />
+              <div className="pin-photo">
+                <img src={b.img} alt={b.title} loading="lazy" />
+              </div>
+              <div className="pin-label">
+                <span className="pin-label-tag">{b.label}</span>
+                <span className="pin-label-title">{b.title}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
 
       <section className="newsletter" style={{ marginTop: 40 }}>
