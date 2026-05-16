@@ -57,7 +57,7 @@ img { max-width: 100%; display: block; }
 }
 
 .header.scrolled .header-inner { padding: 14px 40px; }
-.header.scrolled .header-logo-img { filter: none; }
+.header.scrolled .header-logo-img { filter: brightness(0); }
 .header.scrolled .header-nav a { color: var(--text-light); }
 .header.scrolled .header-nav a:hover { color: var(--text); }
 .header.scrolled .header-cart { color: var(--text); }
@@ -78,7 +78,7 @@ img { max-width: 100%; display: block; }
 .header-logo-img {
   height: 32px;
   width: auto;
-  filter: invert(1);
+  filter: brightness(0) invert(1);
   transition: filter 0.5s ease;
 }
 
@@ -197,8 +197,7 @@ img { max-width: 100%; display: block; }
 
 .hero-logo-img {
   width: clamp(200px, 35vw, 420px);
-  filter: contrast(5) invert(1);
-  mix-blend-mode: screen;
+  filter: brightness(0) invert(1);
   margin-bottom: 16px;
 }
 

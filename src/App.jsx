@@ -83,7 +83,7 @@ function Header() {
       <header className={`header ${scrolled ? 'scrolled' : ''}`}>
         <div className="header-inner">
           <Link to="/" className="header-logo">
-            <img src="/shift-logo.jpeg" alt="Shift" className="header-logo-img" />
+            <img src="/shift-logo.png" alt="Shift" className="header-logo-img" />
           </Link>
           <nav className="header-nav">
             <Link to="/shop">Shop</Link>
@@ -170,7 +170,7 @@ function Footer() {
     <footer className="footer">
       <div className="footer-inner">
         <div>
-          <img src="/shift-logo.jpeg" alt="Shift" className="footer-logo-img" />
+          <img src="/shift-logo.png" alt="Shift" className="footer-logo-img" />
           <p className="footer-desc">
             Your Mindset. Your Focus. Your Perspective. Life keeps moving — and so do we.
           </p>
@@ -268,9 +268,7 @@ function HomePage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.3 }}
         >
-          <div style={{ background: '#000', display: 'inline-block', lineHeight: 0 }}>
-            <img src="/shift-logo.jpeg" alt="Shift" className="hero-logo-img" />
-          </div>
+          <img src="/shift-logo.png" alt="Shift" className="hero-logo-img" />
           <div className="hero-sub">Life Keeps Moving</div>
           <Link to="/shop" className="hero-cta">
             Shop the Collection <ArrowRight size={14} />
@@ -654,7 +652,7 @@ function AboutPage() {
           <img src="/lifestyle/convertible-pink-red.png" alt="Shift lifestyle" loading="lazy" />
         </div>
         <div className="spread-text" style={{ alignItems: 'center', textAlign: 'center' }}>
-          <img src="/shift-logo.jpeg" alt="Shift" style={{ width: 200, marginBottom: 24 }} />
+          <img src="/shift-logo.png" alt="Shift" style={{ width: 200, marginBottom: 24 }} />
           <p style={{ fontSize: 15, color: 'var(--text-light)', lineHeight: 1.8 }}>Your Mindset. Your Focus. Your Perspective.</p>
         </div>
       </section>
