@@ -42,6 +42,45 @@ function ScrollToTop() {
   return null;
 }
 
+function VidDivider({ src, title, subtitle, fallbackBg = 'linear-gradient(135deg, #1a1a1a, #2a2a2a)' }) {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <div className="vid-divider">
+      <div className="vid-divider-clip">
+        {src ? (
+          <video
+            className="vid-divider-video"
+            src={src}
+            autoPlay
+            muted
+            loop
+            playsInline
+            onLoadedData={() => setLoaded(true)}
+            style={{ opacity: loaded ? 1 : 0 }}
+          />
+        ) : (
+          <div style={{ width: '100%', height: '100%', background: fallbackBg }} />
+        )}
+      </div>
+      <div className="vid-divider-overlay-top" />
+      <div className="vid-divider-overlay-bottom" />
+      <div className="vid-divider-content">
+        <motion.div
+          className="vid-divider-box"
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8 }}
+        >
+          {title && <h2 className="vid-divider-title">{title}</h2>}
+          {subtitle && <p className="vid-divider-sub">{subtitle}</p>}
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
 function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -185,12 +224,22 @@ function Footer() {
 
 function HomePage() {
   const featured = products.filter(p => p.featured);
+  const [heroLoaded, setHeroLoaded] = useState(false);
 
   return (
     <>
       <section className="hero">
         <div className="hero-bg">
-          <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%)' }} />
+          <video
+            className="hero-video-bg"
+            src="/videos/shift-hero.mp4"
+            autoPlay
+            muted
+            loop
+            playsInline
+            onLoadedData={() => setHeroLoaded(true)}
+            style={{ opacity: heroLoaded ? 1 : 0 }}
+          />
         </div>
         <motion.div
           className="hero-content"
@@ -253,44 +302,17 @@ function HomePage() {
         </div>
       </section>
 
-      <div className="editorial-grid">
-        <div className="editorial-block" style={{ background: '#0a0a0a' }}>
-          <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ fontSize: 'clamp(60px, 10vw, 120px)', fontWeight: 900, color: 'rgba(237,232,224,0.06)', fontStyle: 'italic' }}>shift→</div>
-          </div>
-        </div>
-        <div className="editorial-text">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-          >
-            <div className="editorial-quote">Keep Moving Forward</div>
-            <div className="editorial-quote-sub">Built for those who refuse to stand still</div>
-          </motion.div>
-        </div>
-      </div>
+      <VidDivider
+        src="/videos/shift-motion.mp4"
+        title="Keep Moving Forward"
+        subtitle="Built for those who refuse to stand still"
+      />
 
-      <section className="collection-banner">
-        <div className="collection-banner-bg">
-          <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)' }} />
-        </div>
-        <div className="collection-banner-overlay" />
-        <motion.div
-          className="collection-banner-content"
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-        >
-          <div className="collection-banner-label">Limited Edition</div>
-          <div className="collection-banner-title">Racing<br />Collection</div>
-          <Link to="/shop" className="collection-banner-cta">
-            Explore <ArrowRight size={14} />
-          </Link>
-        </motion.div>
-      </section>
+      <VidDivider
+        src="/videos/shift-racing.mp4"
+        title="Racing Collection"
+        subtitle="Limited Edition — Built for Speed. No Limits."
+      />
 
       <section className="section section-cream">
         <div className="container">
