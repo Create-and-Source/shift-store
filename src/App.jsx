@@ -268,7 +268,9 @@ function HomePage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.3 }}
         >
-          <img src="/shift-logo.jpeg" alt="Shift" className="hero-logo-img" />
+          <div style={{ background: '#000', display: 'inline-block', lineHeight: 0 }}>
+            <img src="/shift-logo.jpeg" alt="Shift" className="hero-logo-img" />
+          </div>
           <div className="hero-sub">Life Keeps Moving</div>
           <Link to="/shop" className="hero-cta">
             Shop the Collection <ArrowRight size={14} />

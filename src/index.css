@@ -197,7 +197,7 @@ img { max-width: 100%; display: block; }
 
 .hero-logo-img {
   width: clamp(200px, 35vw, 420px);
-  filter: invert(1);
+  filter: contrast(5) invert(1);
   mix-blend-mode: screen;
   margin-bottom: 16px;
 }
