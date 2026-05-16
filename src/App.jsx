@@ -98,7 +98,9 @@ function Header() {
     <>
       <header className={`site-header ${scrolled ? 'scrolled' : ''}`}>
         <div className="header-inner">
-          <Link to="/" className="header-logo">shift→</Link>
+          <Link to="/" className="header-logo">
+            <img src="/shift-logo.jpeg" alt="Shift" className="header-logo-img" />
+          </Link>
           <nav className="header-nav">
             <Link to="/shop">Shop</Link>
             <Link to="/collections">Collections</Link>
@@ -183,7 +185,7 @@ function Footer() {
     <footer className="site-footer">
       <div className="footer-inner">
         <div>
-          <div className="footer-brand-name">shift→</div>
+          <img src="/shift-logo.jpeg" alt="Shift" className="footer-logo-img" />
           <p className="footer-brand-desc">
             Shift your mindset. Shift your focus. Shift your perspective. Life keeps moving.
           </p>
@@ -247,8 +249,7 @@ function HomePage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.3 }}
         >
-          <div className="hero-logo">shift→</div>
-          <div className="hero-tagline">life keeps moving</div>
+          <img src="/shift-logo-tagline.png" alt="Shift — Life Keeps Moving" className="hero-logo-img" />
           <Link to="/shop" className="hero-cta">
             Shop Now <ArrowRight size={14} />
           </Link>
@@ -307,6 +308,29 @@ function HomePage() {
         title="Keep Moving Forward"
         subtitle="Built for those who refuse to stand still"
       />
+
+      <section className="lookbook-section">
+        <div className="lookbook-grid">
+          <motion.div className="lookbook-item lookbook-tall" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
+            <img src="/lifestyle/street-crossing.png" alt="Shift street style" loading="lazy" />
+          </motion.div>
+          <motion.div className="lookbook-item" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}>
+            <img src="/lifestyle/nyc-convertible.png" alt="Shift NYC" loading="lazy" />
+          </motion.div>
+          <motion.div className="lookbook-item" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.2 }}>
+            <img src="/lifestyle/car-meet.png" alt="Shift car meet" loading="lazy" />
+          </motion.div>
+          <motion.div className="lookbook-item lookbook-tall" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.15 }}>
+            <img src="/lifestyle/chinatown.jpg" alt="Shift Chinatown" loading="lazy" />
+          </motion.div>
+          <motion.div className="lookbook-item" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.25 }}>
+            <img src="/lifestyle/subway.png" alt="Shift subway" loading="lazy" />
+          </motion.div>
+          <motion.div className="lookbook-item" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.3 }}>
+            <img src="/lifestyle/coffee-shop.png" alt="Shift coffee shop" loading="lazy" />
+          </motion.div>
+        </div>
+      </section>
 
       <VidDivider
         src="/videos/shift-racing.mp4"
@@ -381,19 +405,12 @@ function ProductCard({ product, index }) {
       transition={{ duration: 0.5, delay: index * 0.08 }}
       onClick={() => navigate(`/product/${product.id}`)}
     >
-      <div
+      <img
         className="product-card-img"
-        style={{
-          background: product.colors[0]?.hex === '#0A0A0A'
-            ? 'linear-gradient(135deg, #1a1a1a, #2a2a2a)'
-            : 'linear-gradient(135deg, #EDE8E0, #D4CFCA)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 'clamp(24px, 4vw, 40px)', fontWeight: 900, fontStyle: 'italic',
-          color: product.colors[0]?.hex === '#0A0A0A' ? 'rgba(237,232,224,0.15)' : 'rgba(10,10,10,0.1)',
-        }}
-      >
-        shift→
-      </div>
+        src={product.image}
+        alt={product.name}
+        loading="lazy"
+      />
       {product.badge && (
         <div style={{
           position: 'absolute', top: 16, left: 16,
@@ -482,22 +499,11 @@ function ProductPage() {
     <div className="product-page">
       <div className="product-layout">
         <div className="product-gallery">
-          {product.colors.map((c, i) => (
-            <div
-              key={i}
-              className="product-gallery-img"
-              style={{
-                background: c.hex === '#0A0A0A' || c.hex === '#2A2A2A'
-                  ? 'linear-gradient(135deg, #1a1a1a, #2a2a2a)'
-                  : 'linear-gradient(135deg, #EDE8E0, #D4CFCA)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 48, fontWeight: 900, fontStyle: 'italic',
-                color: c.hex === '#0A0A0A' || c.hex === '#2A2A2A' ? 'rgba(237,232,224,0.12)' : 'rgba(10,10,10,0.08)',
-              }}
-            >
-              shift→
-            </div>
-          ))}
+          <img
+            className="product-gallery-img full"
+            src={product.image}
+            alt={product.name}
+          />
         </div>
 
         <motion.div
@@ -581,23 +587,17 @@ function CollectionsPage() {
       </section>
 
       <div className="editorial-grid" style={{ margin: '0 40px' }}>
-        <Link to="/shop" className="editorial-block" style={{
-          background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          minHeight: 500,
-        }}>
-          <div style={{ textAlign: 'center', color: 'var(--cream)' }}>
-            <div style={{ fontSize: 14, letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.4, marginBottom: 12 }}>Core</div>
+        <Link to="/shop" className="editorial-block collection-link">
+          <img src="/lifestyle/pizza-shop.png" alt="Essentials collection" loading="lazy" />
+          <div className="collection-link-overlay">
+            <div style={{ fontSize: 14, letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.5, marginBottom: 12 }}>Core</div>
             <div style={{ fontSize: 48, fontWeight: 900, letterSpacing: -1 }}>Essentials</div>
           </div>
         </Link>
-        <Link to="/shop" className="editorial-block" style={{
-          background: 'linear-gradient(135deg, #EDE8E0, #D4CFCA)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          minHeight: 500,
-        }}>
-          <div style={{ textAlign: 'center', color: 'var(--black)' }}>
-            <div style={{ fontSize: 14, letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.4, marginBottom: 12 }}>Limited</div>
+        <Link to="/shop" className="editorial-block collection-link">
+          <img src="/lifestyle/car-meet.png" alt="Racing collection" loading="lazy" />
+          <div className="collection-link-overlay">
+            <div style={{ fontSize: 14, letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.5, marginBottom: 12 }}>Limited</div>
             <div style={{ fontSize: 48, fontWeight: 900, letterSpacing: -1 }}>Racing</div>
           </div>
         </Link>
@@ -643,14 +643,20 @@ function AboutPage() {
 
       <div className="editorial-grid">
         <div className="editorial-text">
-          <div className="editorial-quote" style={{ fontSize: 'clamp(40px, 6vw, 72px)' }}>shift→</div>
+          <img src="/shift-logo.jpeg" alt="Shift" style={{ width: 200, filter: 'brightness(0) invert(1)', marginBottom: 24 }} />
           <div className="editorial-quote-sub">Your Mindset. Your Focus. Your Perspective.</div>
         </div>
-        <div className="editorial-block" style={{
-          background: 'linear-gradient(135deg, #1a1a1a, #0a0a0a)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 500,
-        }}>
-          <div style={{ fontSize: 120, fontWeight: 900, fontStyle: 'italic', color: 'rgba(237,232,224,0.04)' }}>→</div>
+        <div className="editorial-block">
+          <img src="/lifestyle/convertible-pink-red.png" alt="Shift lifestyle" loading="lazy" />
+        </div>
+      </div>
+
+      <div className="editorial-grid">
+        <div className="editorial-block">
+          <img src="/lifestyle/nyc-crosswalk.png" alt="Shift NYC" loading="lazy" />
+        </div>
+        <div className="editorial-block">
+          <img src="/lifestyle/pool-party.png" alt="Shift pool party" loading="lazy" />
         </div>
       </div>
     </div>
