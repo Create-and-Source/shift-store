@@ -52,8 +52,8 @@ function GlitchText({ children, tag: Tag = 'span', className = '' }) {
 
 function Ticker() {
   const items = [
-    'Free Shipping Over $150', 'Heavyweight Premium Cotton', 'Life Keeps Moving',
-    'Oversized Fit', 'Limited Drops', 'Forward Only', 'No Reverse', 'Shift Your Perspective',
+    'Life Keeps Moving', 'Oversized Fit', 'Limited Drops', 'Forward Only',
+    'No Reverse', 'Shift Your Perspective',
   ];
 
   return (
