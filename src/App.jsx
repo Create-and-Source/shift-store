@@ -32,9 +32,49 @@ function ProductsProvider({ children }) {
 
 function useProducts() { return useContext(ProductsContext); }
 
+/* ═══ AUTH CONTEXT ═══ */
+const AuthContext = createContext();
+
+function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user || null);
+      setLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signOut = async () => { await supabase.auth.signOut(); setUser(null); };
+
+  return (
+    <AuthContext.Provider value={{ user, loading, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+function useAuth() { return useContext(AuthContext); }
+
+function RequireAuth({ children }) {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!loading && !user) navigate('/account', { replace: true });
+  }, [user, loading, navigate]);
+  if (loading) return <div style={{ padding: '200px 0', textAlign: 'center' }}><Loader size={24} className="spin" /></div>;
+  return user ? children : null;
+}
+
 const CartContext = createContext();
 
 function CartProvider({ children }) {
+  const { user } = useAuth();
   const [cart, setCart] = useState(() => {
     try { return JSON.parse(localStorage.getItem('shift-cart')) || []; } catch { return []; }
   });
@@ -83,6 +123,7 @@ function CartProvider({ children }) {
             image: i.image,
           })),
           shipping: 10,
+          customerEmail: user?.email || '',
         }),
       });
       const data = await res.json();
@@ -210,6 +251,7 @@ function Header() {
 
 function CartDrawer() {
   const { cart, cartOpen, setCartOpen, updateQty, cartTotal } = useCart();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   return (
@@ -251,9 +293,15 @@ function CartDrawer() {
                 <span>${cartTotal.toFixed(2)}</span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--gray)', marginBottom: 12 }}>Shipping calculated at checkout</div>
-              <button className="checkout-btn" onClick={() => { setCartOpen(false); navigate('/checkout'); }}>
-                Checkout <ArrowRight size={14} />
-              </button>
+              {user ? (
+                <button className="checkout-btn" onClick={() => { setCartOpen(false); navigate('/checkout'); }}>
+                  Checkout <ArrowRight size={14} />
+                </button>
+              ) : (
+                <button className="checkout-btn" onClick={() => { setCartOpen(false); navigate('/account'); }}>
+                  Sign In to Checkout <ArrowRight size={14} />
+                </button>
+              )}
             </div>
           </>
         )}
@@ -1244,24 +1292,23 @@ function AdminOrderDetail({ order, onUpdate, onClose }) {
 /* ═══ CUSTOMER PORTAL ═══ */
 
 function AccountPage() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading, signOut } = useAuth();
   const [authMode, setAuthMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const navigate = useNavigate();
+  const { cart } = useCart();
+  const [wasLoggedOut, setWasLoggedOut] = useState(!user);
 
+  // Redirect to checkout after sign-in if cart has items
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user || null);
-      setLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+    if (wasLoggedOut && user && cart.length > 0) {
+      navigate('/checkout');
+    }
+    if (user) setWasLoggedOut(false);
+  }, [user]);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -1288,11 +1335,6 @@ function AccountPage() {
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-  };
-
   if (loading) return <div style={{ padding: '200px 0', textAlign: 'center' }}><Loader size={24} className="spin" /></div>;
 
   if (!user) {
@@ -1303,7 +1345,9 @@ function AccountPage() {
           <div className="portal-auth-card">
             <img src="/shift-logo.png" alt="Shift" style={{ height: 36, filter: 'brightness(0) invert(1)', marginBottom: 24 }} />
             <h2 style={{ fontSize: 20, fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>My Account</h2>
-            <p style={{ fontSize: 13, color: 'var(--gray)', marginBottom: 24 }}>Track your orders and manage your account</p>
+            <p style={{ fontSize: 13, color: 'var(--gray)', marginBottom: 24 }}>
+              {cart.length > 0 ? 'Sign in to continue to checkout' : 'Track your orders and manage your account'}
+            </p>
 
             <div className="portal-auth-tabs">
               <button className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>Sign In</button>
@@ -1329,7 +1373,7 @@ function AccountPage() {
     );
   }
 
-  return <CustomerDashboard user={user} onLogout={handleLogout} />;
+  return <CustomerDashboard user={user} onLogout={signOut} />;
 }
 
 function CustomerDashboard({ user, onLogout }) {
@@ -1464,24 +1508,26 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <ProductsProvider>
-        <CartProvider>
-          <ScrollToTop />
-          <Header />
-          <CartDrawer />
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/shop" element={<ShopPage />} />
-            <Route path="/product/:id" element={<ProductPage />} />
-            <Route path="/collections" element={<CollectionsPage />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/checkout" element={<CheckoutPage />} />
-            <Route path="/order-success" element={<OrderSuccessPage />} />
-            <Route path="/account" element={<AccountPage />} />
-          </Routes>
-          <Footer />
-        </CartProvider>
-      </ProductsProvider>
+      <AuthProvider>
+        <ProductsProvider>
+          <CartProvider>
+            <ScrollToTop />
+            <Header />
+            <CartDrawer />
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/shop" element={<ShopPage />} />
+              <Route path="/product/:id" element={<ProductPage />} />
+              <Route path="/collections" element={<CollectionsPage />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
+              <Route path="/order-success" element={<OrderSuccessPage />} />
+              <Route path="/account" element={<AccountPage />} />
+            </Routes>
+            <Footer />
+          </CartProvider>
+        </ProductsProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
