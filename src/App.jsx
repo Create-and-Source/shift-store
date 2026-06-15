@@ -478,13 +478,13 @@ function HomePage() {
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
           >
-            <div className="spread-label">Limited Edition</div>
-            <h2 className="spread-title"><GlitchText>Racing Collection</GlitchText></h2>
+            <div className="spread-label">Our Staples</div>
+            <h2 className="spread-title"><GlitchText>The "OG" Collection</GlitchText></h2>
             <p className="spread-body">
-              Vintage acid wash. All-over racing graphics. "Built for Speed. No Limits." — a capsule for those who live in the fast lane.
+              Vintage acid wash. Cool Graphics. Built for those who know that life keeps moving — and so should we.
             </p>
-            <Link to="/product/shift-racing-tee" className="spread-link">
-              Shop Racing <ArrowRight size={14} />
+            <Link to="/shop" className="spread-link">
+              Shop Staples <ArrowRight size={14} />
             </Link>
           </motion.div>
           <div className="spread-img glitch-img-wrap">
