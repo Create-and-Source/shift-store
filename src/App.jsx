@@ -1,21 +1,50 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
-import { BrowserRouter, Routes, Route, Link, useLocation, useParams, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useLocation, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft } from 'lucide-react';
-import { products, collections } from './data/products';
+import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader } from 'lucide-react';
+
+/* ═══ PRODUCTS CONTEXT — fetches from Fulfill Engine ═══ */
+const ProductsContext = createContext();
+
+function ProductsProvider({ children }) {
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/products')
+      .then(r => r.json())
+      .then(data => {
+        setProducts(data.products || []);
+        setCategories(data.categories || []);
+      })
+      .catch(err => console.error('Failed to load products:', err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <ProductsContext.Provider value={{ products, categories, loading }}>
+      {children}
+    </ProductsContext.Provider>
+  );
+}
+
+function useProducts() { return useContext(ProductsContext); }
 
 const CartContext = createContext();
 
 function CartProvider({ children }) {
   const [cart, setCart] = useState([]);
   const [cartOpen, setCartOpen] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
 
-  const addToCart = (product, color, size) => {
+  const addToCart = (product, color, size, image, sizeSurcharge = 0) => {
     const key = `${product.id}-${color}-${size}`;
+    const price = product.price + sizeSurcharge;
     setCart(prev => {
       const existing = prev.find(i => i.key === key);
       if (existing) return prev.map(i => i.key === key ? { ...i, qty: i.qty + 1 } : i);
-      return [...prev, { key, product, color, size, qty: 1 }];
+      return [...prev, { key, product, color, size, image, price, qty: 1 }];
     });
     setCartOpen(true);
   };
@@ -24,11 +53,46 @@ function CartProvider({ children }) {
     setCart(prev => prev.map(i => i.key === key ? { ...i, qty: Math.max(0, i.qty + delta) } : i).filter(i => i.qty > 0));
   };
 
+  const clearCart = () => setCart([]);
+
   const cartCount = cart.reduce((sum, i) => sum + i.qty, 0);
-  const cartTotal = cart.reduce((sum, i) => sum + i.product.price * i.qty, 0);
+  const cartTotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+
+  const checkout = async () => {
+    if (cart.length === 0 || checkingOut) return;
+    setCheckingOut(true);
+    try {
+      const res = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: cart.map(i => ({
+            productId: i.product.id,
+            name: i.product.name,
+            price: i.price,
+            qty: i.qty,
+            color: i.color,
+            size: i.size,
+            image: i.image,
+          })),
+          shipping: 10,
+        }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        console.error('Checkout error:', data.error);
+        setCheckingOut(false);
+      }
+    } catch (err) {
+      console.error('Checkout error:', err);
+      setCheckingOut(false);
+    }
+  };
 
   return (
-    <CartContext.Provider value={{ cart, cartOpen, setCartOpen, addToCart, updateQty, cartCount, cartTotal }}>
+    <CartContext.Provider value={{ cart, cartOpen, setCartOpen, addToCart, updateQty, clearCart, cartCount, cartTotal, checkout, checkingOut }}>
       {children}
     </CartContext.Provider>
   );
@@ -136,7 +200,7 @@ function Header() {
 }
 
 function CartDrawer() {
-  const { cart, cartOpen, setCartOpen, updateQty, cartTotal } = useCart();
+  const { cart, cartOpen, setCartOpen, updateQty, cartTotal, checkout, checkingOut } = useCart();
 
   return (
     <>
@@ -157,11 +221,11 @@ function CartDrawer() {
             <div className="cart-items">
               {cart.map(item => (
                 <div key={item.key} className="cart-item">
-                  <img className="cart-item-img" src={item.product.image} alt={item.product.name} />
+                  <img className="cart-item-img" src={item.image || item.product.image} alt={item.product.name} />
                   <div className="cart-item-info">
                     <div className="cart-item-name">{item.product.name}</div>
                     <div className="cart-item-variant">{item.color} / {item.size}</div>
-                    <div className="cart-item-price">${item.product.price}</div>
+                    <div className="cart-item-price">${item.price.toFixed(2)}</div>
                     <div className="cart-qty">
                       <button onClick={() => updateQty(item.key, -1)}><Minus size={12} /></button>
                       <span>{item.qty}</span>
@@ -173,10 +237,13 @@ function CartDrawer() {
             </div>
             <div className="cart-footer">
               <div className="cart-total">
-                <span>Total</span>
-                <span>${cartTotal}</span>
+                <span>Subtotal</span>
+                <span>${cartTotal.toFixed(2)}</span>
               </div>
-              <button className="checkout-btn">Checkout <ArrowRight size={14} /></button>
+              <div style={{ fontSize: 12, color: 'var(--gray)', marginBottom: 12 }}>Shipping calculated at checkout</div>
+              <button className="checkout-btn" onClick={checkout} disabled={checkingOut}>
+                {checkingOut ? <><Loader size={14} className="spin" /> Processing...</> : <>Checkout <ArrowRight size={14} /></>}
+              </button>
             </div>
           </>
         )}
@@ -334,7 +401,8 @@ function ProductCarousel({ products: items }) {
 /* ═══ PAGES ═══ */
 
 function HomePage() {
-  const featured = products.filter(p => p.featured);
+  const { products } = useProducts();
+  const featured = products.slice(0, 6);
   const [heroLoaded, setHeroLoaded] = useState(false);
 
   return (
@@ -516,10 +584,17 @@ function HomePage() {
 }
 
 function ShopPage() {
+  const { products, categories, loading } = useProducts();
   const [activeFilter, setActiveFilter] = useState('all');
-  const filtered = collections.find(c => c.id === activeFilter)?.filter
-    ? products.filter(collections.find(c => c.id === activeFilter).filter)
-    : products;
+
+  const filters = [
+    { id: 'all', name: 'All' },
+    ...categories.map(c => ({ id: c.id || c.name, name: c.name })),
+  ];
+
+  const filtered = activeFilter === 'all'
+    ? products
+    : products.filter(p => p.category === activeFilter);
 
   return (
     <>
@@ -527,48 +602,74 @@ function ShopPage() {
       <div className="shop-header">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
           <h1 className="shop-title"><GlitchText>Shop All</GlitchText></h1>
-          <div className="shop-filters">
-            {collections.map(c => (
-              <button
-                key={c.id}
-                className={`filter-btn ${activeFilter === c.id ? 'active' : ''}`}
-                onClick={() => setActiveFilter(c.id)}
-              >
-                {c.name}
-              </button>
-            ))}
-          </div>
+          {filters.length > 1 && (
+            <div className="shop-filters">
+              {filters.map(c => (
+                <button
+                  key={c.id}
+                  className={`filter-btn ${activeFilter === c.id ? 'active' : ''}`}
+                  onClick={() => setActiveFilter(c.id)}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
         </motion.div>
       </div>
-      <div className="shop-grid">
-        {filtered.map((p, i) => (
-          <ProductCard key={p.id} product={p} index={i} />
-        ))}
-      </div>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '100px 0', color: 'var(--gray)' }}>
+          <Loader size={24} className="spin" />
+          <p style={{ marginTop: 16 }}>Loading products...</p>
+        </div>
+      ) : (
+        <div className="shop-grid">
+          {filtered.map((p, i) => (
+            <ProductCard key={p.id} product={p} index={i} />
+          ))}
+        </div>
+      )}
     </>
   );
 }
 
 function ProductPage() {
   const { id } = useParams();
+  const { products, loading } = useProducts();
   const product = products.find(p => p.id === id);
   const [selectedColor, setSelectedColor] = useState(0);
   const [selectedSize, setSelectedSize] = useState(null);
   const { addToCart } = useCart();
 
+  if (loading) return <div style={{ padding: '200px 40px', textAlign: 'center', color: 'var(--gray)' }}><Loader size={24} className="spin" /></div>;
   if (!product) return <div style={{ padding: '200px 40px', textAlign: 'center', color: 'var(--gray)' }}>Product not found</div>;
+
+  const currentColor = product.colors[selectedColor] || product.colors[0];
+  const currentImages = currentColor?.images || [];
+  const mainImage = currentImages[0]?.url || product.image;
+  const selectedSizeObj = product.sizes.find(s => s.name === selectedSize);
+  const totalPrice = product.price + (selectedSizeObj?.surcharge || 0);
 
   const handleAdd = () => {
     if (!selectedSize) return;
-    addToCart(product, product.colors[selectedColor].name, selectedSize);
+    addToCart(product, currentColor.name, selectedSize, mainImage, selectedSizeObj?.surcharge || 0);
   };
 
   return (
     <div className="pdp">
       <div className="scanlines" />
       <div className="pdp-layout">
-        <div className="glitch-img-wrap">
-          <img className="pdp-gallery-img" src={product.image} alt={product.name} />
+        <div className="pdp-gallery">
+          {currentImages.map((img, i) => (
+            <div key={i} className="glitch-img-wrap">
+              <img className="pdp-gallery-img" src={img.url} alt={`${product.name} ${img.type}`} />
+            </div>
+          ))}
+          {currentImages.length === 0 && (
+            <div className="glitch-img-wrap">
+              <img className="pdp-gallery-img" src={product.image} alt={product.name} />
+            </div>
+          )}
         </div>
 
         <motion.div
@@ -578,23 +679,16 @@ function ProductPage() {
           transition={{ duration: 0.6 }}
         >
           <div className="pdp-breadcrumb">
-            <Link to="/shop">Shop</Link> <ChevronRight size={10} style={{ margin: '0 6px' }} /> {product.category}
+            <Link to="/shop">Shop</Link> <ChevronRight size={10} style={{ margin: '0 6px' }} /> {product.name}
           </div>
-
-          {product.badge && <div className="product-card-badge" style={{ marginBottom: 16 }}>{product.badge}</div>}
 
           <h1 className="pdp-name">{product.name}</h1>
-          <div className="pdp-price">
-            {product.comparePrice && (
-              <span style={{ textDecoration: 'line-through', color: 'var(--gray)', marginRight: 12 }}>${product.comparePrice}</span>
-            )}
-            ${product.price}
-          </div>
+          <div className="pdp-price">${totalPrice.toFixed(2)}</div>
           <p className="pdp-desc">{product.description}</p>
 
           {product.colors.length > 1 && (
             <>
-              <div className="pdp-label">Color — {product.colors[selectedColor].name}</div>
+              <div className="pdp-label">Color — {currentColor.name}</div>
               <div className="color-options">
                 {product.colors.map((c, i) => (
                   <button
@@ -608,21 +702,25 @@ function ProductPage() {
             </>
           )}
 
-          <div className="pdp-label">Size</div>
-          <div className="size-options">
-            {product.sizes.map(s => (
-              <button
-                key={s}
-                className={`size-btn ${selectedSize === s ? 'active' : ''}`}
-                onClick={() => setSelectedSize(s)}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          {product.sizes.length > 0 && (
+            <>
+              <div className="pdp-label">Size</div>
+              <div className="size-options">
+                {product.sizes.map(s => (
+                  <button
+                    key={s.name}
+                    className={`size-btn ${selectedSize === s.name ? 'active' : ''}`}
+                    onClick={() => setSelectedSize(s.name)}
+                  >
+                    {s.name}{s.surcharge > 0 ? ` (+$${s.surcharge.toFixed(2)})` : ''}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
-          <button className="add-btn" onClick={handleAdd} style={{ opacity: selectedSize ? 1 : 0.5 }}>
-            {selectedSize ? 'Add to Cart' : 'Select a Size'} <ArrowRight size={14} />
+          <button className="add-btn" onClick={handleAdd} style={{ opacity: (selectedSize || product.sizes.length === 0) ? 1 : 0.5 }}>
+            {(selectedSize || product.sizes.length === 0) ? 'Add to Cart' : 'Select a Size'} <ArrowRight size={14} />
           </button>
         </motion.div>
       </div>
@@ -750,22 +848,59 @@ function AboutPage() {
   );
 }
 
+function OrderSuccessPage() {
+  const { clearCart } = useCart();
+  const [searchParams] = useSearchParams();
+  const sessionId = searchParams.get('session_id');
+
+  useEffect(() => {
+    if (sessionId) clearCart();
+  }, [sessionId]);
+
+  return (
+    <>
+      <div className="scanlines" />
+      <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '120px 24px 80px', textAlign: 'center' }}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6 }}
+        >
+          <CheckCircle size={48} style={{ color: 'var(--red)', marginBottom: 24 }} />
+          <h1 style={{ fontSize: 'clamp(28px, 5vw, 42px)', fontWeight: 900, textTransform: 'uppercase', marginBottom: 16 }}>
+            <GlitchText>Order Confirmed</GlitchText>
+          </h1>
+          <p style={{ fontSize: 16, color: 'var(--gray)', maxWidth: 480, margin: '0 auto 32px', lineHeight: 1.6 }}>
+            Thanks for your order. You'll receive a confirmation email shortly with tracking info once your items ship.
+          </p>
+          <Link to="/shop" className="hero-cta" style={{ display: 'inline-flex' }}>
+            Continue Shopping <ArrowRight size={14} />
+          </Link>
+        </motion.div>
+      </div>
+    </>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <CartProvider>
-        <ScrollToTop />
-        <Header />
-        <CartDrawer />
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/shop" element={<ShopPage />} />
-          <Route path="/product/:id" element={<ProductPage />} />
-          <Route path="/collections" element={<CollectionsPage />} />
-          <Route path="/about" element={<AboutPage />} />
-        </Routes>
-        <Footer />
-      </CartProvider>
+      <ProductsProvider>
+        <CartProvider>
+          <ScrollToTop />
+          <Header />
+          <CartDrawer />
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/shop" element={<ShopPage />} />
+            <Route path="/product/:id" element={<ProductPage />} />
+            <Route path="/collections" element={<CollectionsPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/order-success" element={<OrderSuccessPage />} />
+          </Routes>
+          <Footer />
+        </CartProvider>
+      </ProductsProvider>
     </BrowserRouter>
   );
 }

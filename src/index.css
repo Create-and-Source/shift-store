@@ -1628,3 +1628,18 @@ img { max-width: 100%; display: block; }
   .mobile-nav a { font-size: 24px; }
 
 }
+
+/* Spinner animation */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin { animation: spin 1s linear infinite; }
+
+/* PDP gallery for multiple images */
+.pdp-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pdp-gallery .glitch-img-wrap { flex-shrink: 0; }
