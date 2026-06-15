@@ -35,9 +35,15 @@ function useProducts() { return useContext(ProductsContext); }
 const CartContext = createContext();
 
 function CartProvider({ children }) {
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('shift-cart')) || []; } catch { return []; }
+  });
   const [cartOpen, setCartOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('shift-cart', JSON.stringify(cart));
+  }, [cart]);
 
   const addToCart = (product, color, size, image, sizeSurcharge = 0) => {
     const key = `${product.id}-${color}-${size}`;
@@ -54,7 +60,7 @@ function CartProvider({ children }) {
     setCart(prev => prev.map(i => i.key === key ? { ...i, qty: Math.max(0, i.qty + delta) } : i).filter(i => i.qty > 0));
   };
 
-  const clearCart = () => setCart([]);
+  const clearCart = () => { setCart([]); localStorage.removeItem('shift-cart'); };
 
   const cartCount = cart.reduce((sum, i) => sum + i.qty, 0);
   const cartTotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
