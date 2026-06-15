@@ -493,28 +493,6 @@ function HomePage() {
         </div>
       </section>
 
-      {/* SPREAD — New Colorways */}
-      <section className="spread">
-        <div className="spread-img glitch-img-wrap">
-          <img src="/lifestyle/convertible-pink-red.png" alt="Pink collection" loading="lazy" />
-        </div>
-        <motion.div
-          className="spread-text"
-          initial={{ opacity: 0, x: 40 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.7 }}
-        >
-          <div className="spread-label">New Drops</div>
-          <h2 className="spread-title"><GlitchText>Fresh Colorways</GlitchText></h2>
-          <p className="spread-body">
-            Pink Collection and Olive & Orange. New energy, same heavyweight quality. Limited quantities.
-          </p>
-          <Link to="/shop" className="spread-link">
-            Shop New Arrivals <ArrowRight size={14} />
-          </Link>
-        </motion.div>
-      </section>
 
       {/* NEWSLETTER */}
       <section className="newsletter">
