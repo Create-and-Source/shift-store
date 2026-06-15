@@ -406,13 +406,12 @@ function HomePage() {
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
         >
-          <div className="spread-label">Essentials</div>
-          <h2 className="spread-title"><GlitchText>Built for the Move</GlitchText></h2>
+          <h2 className="spread-title"><GlitchText>Meet the Creator</GlitchText></h2>
           <p className="spread-body">
-            400gsm heavyweight cotton. Oversized, relaxed cuts. Pre-shrunk fleece that holds its shape wear after wear. This isn't fast fashion — it's built to last.
+            The heart of this brand is the belief that life's unexpected turns are opportunities to shift, adapt, and move forward. SHIFT was inspired by my own challenges—from weight loss to facing fears—knowing growth comes from change. We're here to encourage you to pivot with purpose, embrace new paths, and ALWAYS keep moving forward.
           </p>
-          <Link to="/shop" className="spread-link">
-            Shop Essentials <ArrowRight size={14} />
+          <Link to="/about" className="spread-link">
+            View the Mission <ArrowRight size={14} />
           </Link>
         </motion.div>
       </section>
