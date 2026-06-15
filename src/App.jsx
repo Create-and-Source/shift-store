@@ -425,7 +425,7 @@ function HomePage() {
         transition={{ duration: 0.8 }}
       >
         <p className="pullquote-text">
-          "The arrow only points one direction — <em>forward</em>. There is no reverse. No pause. No going back."
+          "The arrow only points one direction — <em>forward</em>."
         </p>
       </motion.section>
 
