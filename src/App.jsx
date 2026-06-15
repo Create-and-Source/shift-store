@@ -387,7 +387,7 @@ function HomePage() {
       >
         <div className="intro-label">The Brand</div>
         <h2 className="intro-headline">
-          <GlitchText>More than apparel. A mindset. A movement.</GlitchText>
+          <GlitchText>More than apparel. A mindset.</GlitchText>
         </h2>
         <p className="intro-body">
           Every piece carries the energy of forward motion. Heavyweight, premium, built to last — designed for people who move with intention. The arrow only points one direction.
