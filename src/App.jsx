@@ -1043,37 +1043,50 @@ function OrderSuccessPage() {
 
 /* ═══ ADMIN DASHBOARD ═══ */
 
-const ADMIN_KEY = 'shift-admin-2026';
 
 function AdminPage() {
-  const [authed, setAuthed] = useState(() => sessionStorage.getItem('shift-admin') === 'true');
-  const [password, setPassword] = useState('');
+  const [authed, setAuthed] = useState(() => !!sessionStorage.getItem('shift-admin-pw'));
+  const [adminPassword, setAdminPassword] = useState(() => sessionStorage.getItem('shift-admin-pw') || '');
+  const [draftPassword, setDraftPassword] = useState('');
+  const [status, setStatus] = useState('');
+
+  const login = async (e) => {
+    e.preventDefault();
+    setStatus('');
+    try {
+      const res = await fetch('/api/admin/orders?status=all', {
+        headers: { 'x-admin-key': draftPassword },
+      });
+      if (!res.ok) throw new Error('Invalid password');
+      sessionStorage.setItem('shift-admin-pw', draftPassword);
+      setAdminPassword(draftPassword);
+      setAuthed(true);
+    } catch (err) {
+      setStatus(err.message);
+    }
+  };
 
   if (!authed) {
     return (
       <div className="admin-login">
         <div className="admin-login-card">
-          <Lock size={32} style={{ color: 'var(--red)', marginBottom: 16 }} />
-          <h2>Admin Access</h2>
-          <form onSubmit={e => {
-            e.preventDefault();
-            if (password === ADMIN_KEY) {
-              sessionStorage.setItem('shift-admin', 'true');
-              setAuthed(true);
-            }
-          }}>
-            <input type="password" placeholder="Admin password" value={password} onChange={e => setPassword(e.target.value)} />
-            <button type="submit">Enter</button>
+          <img src="/shift-logo.png" alt="Shift" style={{ height: 32, filter: 'brightness(0) invert(1)', marginBottom: 24 }} />
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--gray)', marginBottom: 4 }}>Shift Admin</p>
+          <h2>Sign In</h2>
+          <form onSubmit={login}>
+            <input type="password" placeholder="Admin password" value={draftPassword} onChange={e => setDraftPassword(e.target.value)} />
+            <button type="submit">Enter Admin</button>
           </form>
+          {status && <p style={{ color: '#e53e3e', fontSize: 13, marginTop: 12 }}>{status}</p>}
         </div>
       </div>
     );
   }
 
-  return <AdminDashboard />;
+  return <AdminDashboard adminPassword={adminPassword} />;
 }
 
-function AdminDashboard() {
+function AdminDashboard({ adminPassword }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -1083,7 +1096,7 @@ function AdminDashboard() {
   const fetchOrders = async () => {
     setLoading(true);
     const res = await fetch(`/api/admin/orders?status=${filter}`, {
-      headers: { 'x-admin-key': ADMIN_KEY },
+      headers: { 'x-admin-key': adminPassword },
     });
     const data = await res.json();
     setOrders(Array.isArray(data) ? data : []);
@@ -1095,7 +1108,7 @@ function AdminDashboard() {
   const updateOrder = async (orderId, updates) => {
     await fetch('/api/admin/orders', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
       body: JSON.stringify({ orderId, ...updates }),
     });
     fetchOrders();
@@ -1108,8 +1121,9 @@ function AdminDashboard() {
   const statusColors = { new: '#e53e3e', processing: '#dd6b20', shipped: '#3182ce', delivered: '#38a169', cancelled: '#718096' };
 
   const logout = () => {
-    sessionStorage.removeItem('shift-admin');
+    sessionStorage.removeItem('shift-admin-pw');
     navigate('/');
+    window.location.reload();
   };
 
   return (
