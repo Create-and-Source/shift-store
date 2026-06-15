@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader } from 'lucide-react';
+import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader, Package, Truck, Eye, LogOut, Lock, Mail, Clock, Search } from 'lucide-react';
+import { supabase } from './lib/supabase';
 
 /* ═══ PRODUCTS CONTEXT — fetches from Fulfill Engine ═══ */
 const ProductsContext = createContext();
@@ -173,6 +174,7 @@ function Header() {
             <Link to="/shop">Shop</Link>
             <Link to="/collections">Collections</Link>
             <Link to="/about">About</Link>
+            <Link to="/account">Account</Link>
           </nav>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             <button className="header-cart" onClick={() => setCartOpen(true)}>
@@ -194,6 +196,7 @@ function Header() {
         <Link to="/shop" onClick={() => setMobileOpen(false)}>Shop</Link>
         <Link to="/collections" onClick={() => setMobileOpen(false)}>Collections</Link>
         <Link to="/about" onClick={() => setMobileOpen(false)}>About</Link>
+        <Link to="/account" onClick={() => setMobileOpen(false)}>Account</Link>
       </div>
     </>
   );
@@ -882,7 +885,475 @@ function OrderSuccessPage() {
   );
 }
 
+/* ═══ ADMIN DASHBOARD ═══ */
+
+const ADMIN_KEY = 'shift-admin-2026';
+
+function AdminPage() {
+  const [authed, setAuthed] = useState(() => sessionStorage.getItem('shift-admin') === 'true');
+  const [password, setPassword] = useState('');
+
+  if (!authed) {
+    return (
+      <div className="admin-login">
+        <div className="admin-login-card">
+          <Lock size={32} style={{ color: 'var(--red)', marginBottom: 16 }} />
+          <h2>Admin Access</h2>
+          <form onSubmit={e => {
+            e.preventDefault();
+            if (password === ADMIN_KEY) {
+              sessionStorage.setItem('shift-admin', 'true');
+              setAuthed(true);
+            }
+          }}>
+            <input type="password" placeholder="Admin password" value={password} onChange={e => setPassword(e.target.value)} />
+            <button type="submit">Enter</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return <AdminDashboard />;
+}
+
+function AdminDashboard() {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+  const [selected, setSelected] = useState(null);
+  const navigate = useNavigate();
+
+  const fetchOrders = async () => {
+    setLoading(true);
+    const res = await fetch(`/api/admin/orders?status=${filter}`, {
+      headers: { 'x-admin-key': ADMIN_KEY },
+    });
+    const data = await res.json();
+    setOrders(Array.isArray(data) ? data : []);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchOrders(); }, [filter]);
+
+  const updateOrder = async (orderId, updates) => {
+    await fetch('/api/admin/orders', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+      body: JSON.stringify({ orderId, ...updates }),
+    });
+    fetchOrders();
+    if (selected?.id === orderId) {
+      setSelected(prev => ({ ...prev, ...updates }));
+    }
+  };
+
+  const statuses = ['all', 'new', 'processing', 'shipped', 'delivered', 'cancelled'];
+  const statusColors = { new: '#e53e3e', processing: '#dd6b20', shipped: '#3182ce', delivered: '#38a169', cancelled: '#718096' };
+
+  const logout = () => {
+    sessionStorage.removeItem('shift-admin');
+    navigate('/');
+  };
+
+  return (
+    <div className="admin">
+      <div className="admin-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <img src="/shift-logo.png" alt="Shift" style={{ height: 28, filter: 'brightness(0) invert(1)' }} />
+          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--gray)' }}>Admin</span>
+        </div>
+        <button onClick={logout} style={{ background: 'none', border: 'none', color: 'var(--gray)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <LogOut size={16} /> Logout
+        </button>
+      </div>
+
+      <div className="admin-stats">
+        {['new', 'processing', 'shipped', 'delivered'].map(s => {
+          const count = orders.filter(o => filter === 'all' ? o.status === s : true).length;
+          return filter === 'all' ? (
+            <div key={s} className="admin-stat" onClick={() => setFilter(s)} style={{ cursor: 'pointer' }}>
+              <div className="admin-stat-count" style={{ color: statusColors[s] }}>{orders.filter(o => o.status === s).length}</div>
+              <div className="admin-stat-label">{s}</div>
+            </div>
+          ) : null;
+        })}
+        {filter === 'all' && (
+          <div className="admin-stat">
+            <div className="admin-stat-count">{orders.length}</div>
+            <div className="admin-stat-label">total</div>
+          </div>
+        )}
+      </div>
+
+      <div className="admin-filters">
+        {statuses.map(s => (
+          <button key={s} className={`filter-btn ${filter === s ? 'active' : ''}`} onClick={() => { setFilter(s); setSelected(null); }}>
+            {s === 'all' ? 'All Orders' : s.charAt(0).toUpperCase() + s.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      <div className="admin-content">
+        <div className="admin-orders-list">
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--gray)' }}><Loader size={20} className="spin" /></div>
+          ) : orders.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--gray)' }}>No orders</div>
+          ) : (
+            orders.map(order => (
+              <div
+                key={order.id}
+                className={`admin-order-row ${selected?.id === order.id ? 'selected' : ''}`}
+                onClick={() => setSelected(order)}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>#{order.id.slice(0, 8)}</span>
+                  <span className="status-badge" style={{ background: statusColors[order.status] + '22', color: statusColors[order.status] }}>
+                    {order.status}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--gray)' }}>
+                  {order.customer?.name || order.customer?.email || 'Guest'}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12 }}>
+                  <span style={{ color: 'var(--gray)' }}>{new Date(order.created_at).toLocaleDateString()}</span>
+                  <span style={{ fontWeight: 600 }}>${Number(order.total).toFixed(2)}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {selected && <AdminOrderDetail order={selected} onUpdate={updateOrder} onClose={() => setSelected(null)} />}
+      </div>
+    </div>
+  );
+}
+
+function AdminOrderDetail({ order, onUpdate, onClose }) {
+  const [tracking, setTracking] = useState(order.tracking_number || '');
+  const [trackingUrl, setTrackingUrl] = useState(order.tracking_url || '');
+  const [notes, setNotes] = useState(order.admin_notes || '');
+
+  useEffect(() => {
+    setTracking(order.tracking_number || '');
+    setTrackingUrl(order.tracking_url || '');
+    setNotes(order.admin_notes || '');
+  }, [order.id]);
+
+  const addr = order.shipping_address || {};
+  const statusColors = { new: '#e53e3e', processing: '#dd6b20', shipped: '#3182ce', delivered: '#38a169', cancelled: '#718096' };
+  const nextStatus = { new: 'processing', processing: 'shipped', shipped: 'delivered' };
+
+  return (
+    <div className="admin-order-detail">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <h3 style={{ margin: 0, fontSize: 16 }}>Order #{order.id.slice(0, 8)}</h3>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--gray)', cursor: 'pointer' }}><X size={18} /></button>
+      </div>
+
+      <div className="admin-detail-section">
+        <div className="admin-detail-label">Status</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <span className="status-badge" style={{ background: statusColors[order.status] + '22', color: statusColors[order.status], fontSize: 13 }}>
+            {order.status}
+          </span>
+          {nextStatus[order.status] && (
+            <button className="admin-action-btn" onClick={() => onUpdate(order.id, { status: nextStatus[order.status] })}>
+              Mark as {nextStatus[order.status]}
+            </button>
+          )}
+          {order.status !== 'cancelled' && order.status !== 'delivered' && (
+            <button className="admin-action-btn" style={{ color: '#e53e3e' }} onClick={() => {
+              if (confirm('Cancel this order?')) onUpdate(order.id, { status: 'cancelled' });
+            }}>Cancel</button>
+          )}
+        </div>
+      </div>
+
+      <div className="admin-detail-section">
+        <div className="admin-detail-label">Customer</div>
+        <div>{order.customer?.name || '—'}</div>
+        <div style={{ fontSize: 13, color: 'var(--gray)' }}>{order.customer?.email}</div>
+      </div>
+
+      <div className="admin-detail-section">
+        <div className="admin-detail-label">Shipping Address</div>
+        <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+          {addr.name && <div>{addr.name}</div>}
+          {addr.line1 && <div>{addr.line1}</div>}
+          {addr.line2 && <div>{addr.line2}</div>}
+          <div>{[addr.city, addr.state, addr.postal_code].filter(Boolean).join(', ')}</div>
+        </div>
+      </div>
+
+      <div className="admin-detail-section">
+        <div className="admin-detail-label">Items</div>
+        {(order.items || []).map((item, i) => (
+          <div key={i} className="admin-item-row">
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{item.product_name}</div>
+              <div style={{ fontSize: 12, color: 'var(--gray)' }}>{[item.color, item.size].filter(Boolean).join(' / ')}</div>
+            </div>
+            <div style={{ fontSize: 13, textAlign: 'right' }}>
+              <div>x{item.quantity}</div>
+              <div>${Number(item.unit_price).toFixed(2)}</div>
+            </div>
+          </div>
+        ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)', fontWeight: 700 }}>
+          <span>Total</span>
+          <span>${Number(order.total).toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div className="admin-detail-section">
+        <div className="admin-detail-label">Tracking</div>
+        <input placeholder="Tracking number" value={tracking} onChange={e => setTracking(e.target.value)} className="admin-input" />
+        <input placeholder="Tracking URL (optional)" value={trackingUrl} onChange={e => setTrackingUrl(e.target.value)} className="admin-input" style={{ marginTop: 8 }} />
+        <button className="admin-action-btn" style={{ marginTop: 8 }} onClick={() => onUpdate(order.id, { tracking_number: tracking, tracking_url: trackingUrl })}>
+          Save Tracking
+        </button>
+      </div>
+
+      <div className="admin-detail-section">
+        <div className="admin-detail-label">Notes</div>
+        <textarea placeholder="Internal notes..." value={notes} onChange={e => setNotes(e.target.value)} className="admin-input" rows={3} />
+        <button className="admin-action-btn" style={{ marginTop: 8 }} onClick={() => onUpdate(order.id, { admin_notes: notes })}>
+          Save Notes
+        </button>
+      </div>
+
+      <div style={{ fontSize: 11, color: 'var(--gray)', marginTop: 16 }}>
+        Created: {new Date(order.created_at).toLocaleString()}<br />
+        Updated: {new Date(order.updated_at).toLocaleString()}
+      </div>
+    </div>
+  );
+}
+
+/* ═══ CUSTOMER PORTAL ═══ */
+
+function AccountPage() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [authMode, setAuthMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user || null);
+      setLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+
+    if (authMode === 'magic') {
+      const { error } = await supabase.auth.signInWithOtp({ email });
+      if (error) setError(error.message);
+      else setMessage('Check your email for a login link!');
+      return;
+    }
+
+    if (authMode === 'login') {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) setError(error.message);
+      return;
+    }
+
+    if (authMode === 'signup') {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) setError(error.message);
+      else setMessage('Account created! Check your email to confirm.');
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  if (loading) return <div style={{ padding: '200px 0', textAlign: 'center' }}><Loader size={24} className="spin" /></div>;
+
+  if (!user) {
+    return (
+      <>
+        <div className="scanlines" />
+        <div className="portal-auth">
+          <div className="portal-auth-card">
+            <img src="/shift-logo.png" alt="Shift" style={{ height: 36, filter: 'brightness(0) invert(1)', marginBottom: 24 }} />
+            <h2 style={{ fontSize: 20, fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>My Account</h2>
+            <p style={{ fontSize: 13, color: 'var(--gray)', marginBottom: 24 }}>Track your orders and manage your account</p>
+
+            <div className="portal-auth-tabs">
+              <button className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>Sign In</button>
+              <button className={authMode === 'signup' ? 'active' : ''} onClick={() => setAuthMode('signup')}>Sign Up</button>
+              <button className={authMode === 'magic' ? 'active' : ''} onClick={() => setAuthMode('magic')}>Magic Link</button>
+            </div>
+
+            <form onSubmit={handleAuth}>
+              <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required className="portal-input" />
+              {authMode !== 'magic' && (
+                <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required className="portal-input" />
+              )}
+              <button type="submit" className="portal-btn">
+                {authMode === 'magic' ? 'Send Magic Link' : authMode === 'signup' ? 'Create Account' : 'Sign In'}
+              </button>
+            </form>
+
+            {error && <div style={{ color: '#e53e3e', fontSize: 13, marginTop: 12 }}>{error}</div>}
+            {message && <div style={{ color: '#38a169', fontSize: 13, marginTop: 12 }}>{message}</div>}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return <CustomerDashboard user={user} onLogout={handleLogout} />;
+}
+
+function CustomerDashboard({ user, onLogout }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      // Get customer's orders via the anon key (RLS filters to their orders)
+      const { data } = await supabase
+        .from('orders')
+        .select('*, items:order_items(*)')
+        .order('created_at', { ascending: false });
+      setOrders(data || []);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const statusSteps = ['new', 'processing', 'shipped', 'delivered'];
+  const statusLabels = { new: 'Order Placed', processing: 'Processing', shipped: 'Shipped', delivered: 'Delivered' };
+  const statusIcons = { new: Package, processing: Clock, shipped: Truck, delivered: CheckCircle };
+
+  return (
+    <>
+      <div className="scanlines" />
+      <div className="portal">
+        <div className="portal-header">
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>My Orders</h1>
+            <p style={{ fontSize: 13, color: 'var(--gray)' }}>{user.email}</p>
+          </div>
+          <button onClick={onLogout} className="portal-logout">
+            <LogOut size={14} /> Sign Out
+          </button>
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 60 }}><Loader size={24} className="spin" /></div>
+        ) : orders.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 60, color: 'var(--gray)' }}>
+            <Package size={32} style={{ marginBottom: 16, opacity: 0.3 }} />
+            <p>No orders yet</p>
+            <Link to="/shop" className="hero-cta" style={{ display: 'inline-flex', marginTop: 16 }}>Start Shopping <ArrowRight size={14} /></Link>
+          </div>
+        ) : (
+          <div className="portal-orders">
+            {orders.map(order => (
+              <div key={order.id} className="portal-order-card" onClick={() => setSelected(selected?.id === order.id ? null : order)}>
+                <div className="portal-order-top">
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>Order #{order.id.slice(0, 8)}</div>
+                    <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 2 }}>{new Date(order.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 700 }}>${Number(order.total).toFixed(2)}</div>
+                    <div style={{ fontSize: 11, color: order.status === 'delivered' ? '#38a169' : 'var(--red)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{order.status}</div>
+                  </div>
+                </div>
+
+                {/* Status timeline */}
+                <div className="portal-timeline">
+                  {statusSteps.map((step, i) => {
+                    const currentIdx = statusSteps.indexOf(order.status === 'cancelled' ? 'new' : order.status);
+                    const active = i <= currentIdx;
+                    const Icon = statusIcons[step];
+                    return (
+                      <div key={step} className={`portal-timeline-step ${active ? 'active' : ''}`}>
+                        <div className="portal-timeline-dot"><Icon size={12} /></div>
+                        <span>{statusLabels[step]}</span>
+                        {i < statusSteps.length - 1 && <div className={`portal-timeline-line ${i < currentIdx ? 'active' : ''}`} />}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {order.status === 'cancelled' && (
+                  <div style={{ fontSize: 13, color: '#e53e3e', fontWeight: 600, marginTop: 8 }}>This order was cancelled</div>
+                )}
+
+                {selected?.id === order.id && (
+                  <div className="portal-order-detail">
+                    <div className="portal-detail-label">Items</div>
+                    {(order.items || []).map((item, i) => (
+                      <div key={i} className="portal-item-row">
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{item.product_name}</div>
+                          <div style={{ fontSize: 12, color: 'var(--gray)' }}>{[item.color, item.size].filter(Boolean).join(' / ')} x{item.quantity}</div>
+                        </div>
+                        <div style={{ fontWeight: 600 }}>${(Number(item.unit_price) * item.quantity).toFixed(2)}</div>
+                      </div>
+                    ))}
+
+                    {order.tracking_number && (
+                      <div style={{ marginTop: 16 }}>
+                        <div className="portal-detail-label">Tracking</div>
+                        {order.tracking_url ? (
+                          <a href={order.tracking_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--red)', fontSize: 13 }}>
+                            {order.tracking_number} <ArrowRight size={12} />
+                          </a>
+                        ) : (
+                          <span style={{ fontSize: 13 }}>{order.tracking_number}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 export default function App() {
+  const location = window.location.pathname;
+  const isAdmin = location.startsWith('/dashadmin');
+
+  // Admin routes don't need the store layout
+  if (isAdmin) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/dashadmin" element={<AdminPage />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
+
   return (
     <BrowserRouter>
       <ProductsProvider>
@@ -897,6 +1368,7 @@ export default function App() {
             <Route path="/collections" element={<CollectionsPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/order-success" element={<OrderSuccessPage />} />
+            <Route path="/account" element={<AccountPage />} />
           </Routes>
           <Footer />
         </CartProvider>

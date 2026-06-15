@@ -1,12 +1,14 @@
 import Stripe from 'stripe'
+import { createClient } from '@supabase/supabase-js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
 })
 
-const FE_API_KEY = process.env.FULFILL_ENGINE_API_KEY
-const FE_ACCOUNT_ID = 'act-9679744'
-const FE_CAMPAIGN_ID = 'b1e7b585-569d-4b88-ad27-4ce43ffcbb91'
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
 
 export const config = {
   api: { bodyParser: false },
@@ -20,49 +22,47 @@ async function buffer(readable) {
   return Buffer.concat(chunks)
 }
 
-async function submitFEOrder(items, shippingAddress, customerEmail, sessionId) {
-  const orderItemGroups = items.map(item => ({
-    catalogProductId: item.id,
-    productColor: item.c || '',
-    productSize: item.s || '',
-    quantity: item.q,
-  }))
+async function getOrCreateCustomer(email, name) {
+  // Check if customer exists
+  const { data: existing } = await supabase
+    .from('customers')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle()
 
-  const payload = {
-    campaignId: FE_CAMPAIGN_ID,
-    customerEmailAddress: customerEmail,
-    customId: `SHIFT-${sessionId.slice(-8)}`,
-    orderItemGroups,
-    shipments: [{
-      shippingAddress: {
-        name: shippingAddress.name || '',
-        addressLine1: shippingAddress.line1 || '',
-        addressLine2: shippingAddress.line2 || '',
-        city: shippingAddress.city || '',
-        state: shippingAddress.state || '',
-        postalCode: shippingAddress.postal_code || '',
-        country: shippingAddress.country || 'US',
-      },
-      shippingTier: 'economy',
-      confirmationEmailAddress: customerEmail,
-    }],
-  }
+  if (existing) return existing.id
 
-  const res = await fetch(`https://api.fulfillengine.com/api/accounts/${FE_ACCOUNT_ID}/orders`, {
-    method: 'POST',
-    headers: {
-      'X-API-KEY': FE_API_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
+  // Create auth user (for customer portal login)
+  const tempPassword = crypto.randomUUID().slice(0, 16)
+  const { data: authUser } = await supabase.auth.admin.createUser({
+    email,
+    password: tempPassword,
+    email_confirm: true,
   })
 
-  const text = await res.text()
-  let data
-  try { data = JSON.parse(text) } catch { data = { raw: text } }
+  // Create customer record
+  const { data: customer, error } = await supabase
+    .from('customers')
+    .insert({
+      email,
+      name: name || '',
+      auth_id: authUser?.user?.id || null,
+    })
+    .select('id')
+    .single()
 
-  console.log(`FE order submit: ${res.status}`, JSON.stringify(data))
-  return { success: res.ok, status: res.status, data }
+  if (error) {
+    console.error('Customer creation error:', error)
+    // If unique constraint, customer was just created by another request
+    const { data: retry } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle()
+    return retry?.id || null
+  }
+
+  return customer.id
 }
 
 export default async function handler(req, res) {
@@ -90,23 +90,90 @@ export default async function handler(req, res) {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object
 
+    // Idempotency check
+    const { data: existingOrder } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('stripe_session_id', session.id)
+      .maybeSingle()
+
+    if (existingOrder) {
+      console.log('Duplicate webhook — order exists:', existingOrder.id)
+      return res.status(200).json({ received: true, duplicate: true })
+    }
+
     let orderItems = []
     try {
       orderItems = JSON.parse(session.metadata?.itemsJson || '[]')
     } catch {}
+
+    // Get line items from Stripe for full details
+    const lineItems = await stripe.checkout.sessions.listLineItems(session.id)
+    const items = lineItems.data
+      .filter(li => li.description !== 'Shipping')
+      .map((li, idx) => ({
+        productId: orderItems[idx]?.id || '',
+        name: orderItems[idx]?.n || li.description,
+        qty: li.quantity,
+        price: li.amount_total / 100 / li.quantity,
+        color: orderItems[idx]?.c || '',
+        size: orderItems[idx]?.s || '',
+      }))
 
     const shippingDetails = session.shipping_details || session.shipping || {}
     const shippingAddress = shippingDetails.address || {}
     shippingAddress.name = shippingDetails.name || session.customer_details?.name || ''
 
     const customerEmail = session.customer_details?.email || ''
+    const customerName = session.customer_details?.name || ''
 
-    try {
-      const result = await submitFEOrder(orderItems, shippingAddress, customerEmail, session.id)
-      console.log('FE fulfillment result:', JSON.stringify(result))
-    } catch (err) {
-      console.error('FE fulfillment error:', err.message)
+    // Get or create customer
+    const customerId = await getOrCreateCustomer(customerEmail, customerName)
+
+    const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0)
+    const total = session.amount_total / 100
+
+    // Create order
+    const { data: order, error: orderErr } = await supabase
+      .from('orders')
+      .insert({
+        customer_id: customerId,
+        stripe_session_id: session.id,
+        stripe_payment_intent: session.payment_intent,
+        status: 'new',
+        subtotal,
+        shipping_cost: total - subtotal,
+        total,
+        shipping_address: shippingAddress,
+      })
+      .select('id')
+      .single()
+
+    if (orderErr) {
+      console.error('Order creation error:', orderErr)
+      return res.status(500).json({ error: 'Failed to create order' })
     }
+
+    // Create order items
+    const orderItemRows = items.map(item => ({
+      order_id: order.id,
+      product_id: item.productId,
+      product_name: item.name,
+      color: item.color,
+      size: item.size,
+      quantity: item.qty,
+      unit_price: item.price,
+    }))
+
+    const { error: itemsErr } = await supabase
+      .from('order_items')
+      .insert(orderItemRows)
+
+    if (itemsErr) {
+      console.error('Order items error:', itemsErr)
+    }
+
+    console.log('Order created:', order.id, 'for', customerEmail)
   }
 
   return res.status(200).json({ received: true })
