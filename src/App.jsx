@@ -203,7 +203,8 @@ function Header() {
 }
 
 function CartDrawer() {
-  const { cart, cartOpen, setCartOpen, updateQty, cartTotal, checkout, checkingOut } = useCart();
+  const { cart, cartOpen, setCartOpen, updateQty, cartTotal } = useCart();
+  const navigate = useNavigate();
 
   return (
     <>
@@ -244,8 +245,8 @@ function CartDrawer() {
                 <span>${cartTotal.toFixed(2)}</span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--gray)', marginBottom: 12 }}>Shipping calculated at checkout</div>
-              <button className="checkout-btn" onClick={checkout} disabled={checkingOut}>
-                {checkingOut ? <><Loader size={14} className="spin" /> Processing...</> : <>Checkout <ArrowRight size={14} /></>}
+              <button className="checkout-btn" onClick={() => { setCartOpen(false); navigate('/checkout'); }}>
+                Checkout <ArrowRight size={14} />
               </button>
             </div>
           </>
@@ -851,6 +852,107 @@ function AboutPage() {
   );
 }
 
+function CheckoutPage() {
+  const { cart, updateQty, cartTotal, checkout, checkingOut } = useCart();
+  const { products } = useProducts();
+  const navigate = useNavigate();
+  const [selectedSuggestion, setSelectedSuggestion] = useState(null);
+
+  const cartProductIds = new Set(cart.map(i => i.product.id));
+  const suggestions = products.filter(p => !cartProductIds.has(p.id)).slice(0, 6);
+
+  if (!cart.length) {
+    return (
+      <>
+        <div className="scanlines" />
+        <div className="ck-page">
+          <div className="ck-empty">
+            <ShoppingBag size={40} style={{ opacity: 0.3, marginBottom: 16 }} />
+            <h2>Your cart is empty</h2>
+            <Link to="/shop" className="hero-cta" style={{ display: 'inline-flex', marginTop: 16 }}>Continue Shopping <ArrowRight size={14} /></Link>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="scanlines" />
+      <div className="ck-page">
+        <div className="ck-container">
+          <div className="ck-left">
+            <Link to="/shop" className="ck-back"><ArrowLeft size={14} /> Continue Shopping</Link>
+            <h1 className="ck-title"><GlitchText>Checkout</GlitchText></h1>
+            <p style={{ fontSize: 13, color: 'var(--gray)', marginBottom: 32 }}>{cart.length} item{cart.length !== 1 ? 's' : ''} in your bag</p>
+
+            <div className="ck-items">
+              {cart.map(item => (
+                <div key={item.key} className="ck-item">
+                  <img src={item.image || item.product.image} alt={item.product.name} className="ck-item-img" />
+                  <div className="ck-item-info">
+                    <div className="ck-item-name">{item.product.name}</div>
+                    <div className="ck-item-variant">{item.color} / {item.size}</div>
+                    <div className="ck-item-price">${item.price.toFixed(2)}</div>
+                    <div className="ck-item-actions">
+                      <div className="cart-qty">
+                        <button onClick={() => updateQty(item.key, -1)}><Minus size={12} /></button>
+                        <span>{item.qty}</span>
+                        <button onClick={() => updateQty(item.key, 1)}><Plus size={12} /></button>
+                      </div>
+                      <button className="ck-remove" onClick={() => updateQty(item.key, -item.qty)}>Remove</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="ck-right">
+            <div className="ck-summary">
+              <h2 style={{ fontSize: 16, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 20 }}>Order Summary</h2>
+              <div className="ck-summary-row">
+                <span>Subtotal</span>
+                <span>${cartTotal.toFixed(2)}</span>
+              </div>
+              <div className="ck-summary-row">
+                <span>Shipping</span>
+                <span style={{ fontSize: 12, color: 'var(--gray)' }}>Calculated at payment</span>
+              </div>
+              <div className="ck-summary-row ck-summary-total">
+                <span>Estimated Total</span>
+                <span>${cartTotal.toFixed(2)}</span>
+              </div>
+              <button className="ck-pay-btn" onClick={checkout} disabled={checkingOut}>
+                {checkingOut ? <><Loader size={14} className="spin" /> Processing...</> : <>Pay Now <ArrowRight size={14} /></>}
+              </button>
+              <p className="ck-secure">
+                <Lock size={12} /> Secure checkout. Your payment info is encrypted.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {suggestions.length > 0 && (
+          <div className="ck-suggestions">
+            <h3 style={{ fontSize: 16, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Add to Your Order</h3>
+            <p style={{ fontSize: 13, color: 'var(--gray)', marginBottom: 24 }}>Same flat rate shipping no matter how many items you add.</p>
+            <div className="ck-suggestions-grid">
+              {suggestions.map(p => (
+                <div key={p.id} className="ck-suggestion" onClick={() => navigate(`/product/${p.id}`)}>
+                  <img src={p.image} alt={p.name} />
+                  <div className="ck-suggestion-name">{p.name}</div>
+                  <div className="ck-suggestion-price">${p.price.toFixed(2)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function OrderSuccessPage() {
   const { clearCart } = useCart();
   const [searchParams] = useSearchParams();
@@ -1367,6 +1469,7 @@ export default function App() {
             <Route path="/product/:id" element={<ProductPage />} />
             <Route path="/collections" element={<CollectionsPage />} />
             <Route path="/about" element={<AboutPage />} />
+            <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/order-success" element={<OrderSuccessPage />} />
             <Route path="/account" element={<AccountPage />} />
           </Routes>
