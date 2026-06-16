@@ -10,21 +10,38 @@ const ProductsContext = createContext();
 function ProductsProvider({ children }) {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [customCategories, setCustomCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/products')
-      .then(r => r.json())
-      .then(data => {
-        setProducts(data.products || []);
-        setCategories(data.categories || []);
-      })
-      .catch(err => console.error('Failed to load products:', err))
+    Promise.all([
+      fetch('/api/products').then(r => r.json()),
+      fetch('/api/admin/categories').then(r => r.json()),
+    ]).then(([prodData, catData]) => {
+      const hidden = new Set(catData.hiddenProductIds || []);
+      const allProducts = (prodData.products || []).filter(p => !hidden.has(p.id));
+
+      // Attach custom categories to each product
+      const assignMap = new Map();
+      const catById = new Map((catData.categories || []).map(c => [c.id, c.name]));
+      for (const a of (catData.assignments || [])) {
+        const name = catById.get(a.category_id);
+        if (!name) continue;
+        const cur = assignMap.get(a.product_id) || [];
+        cur.push(name);
+        assignMap.set(a.product_id, cur);
+      }
+      allProducts.forEach(p => { p.customCategories = assignMap.get(p.id) || []; });
+
+      setProducts(allProducts);
+      setCategories(prodData.categories || []);
+      setCustomCategories(catData.categories || []);
+    }).catch(err => console.error('Failed to load products:', err))
       .finally(() => setLoading(false));
   }, []);
 
   return (
-    <ProductsContext.Provider value={{ products, categories, loading }}>
+    <ProductsContext.Provider value={{ products, categories, customCategories, loading }}>
       {children}
     </ProductsContext.Provider>
   );
@@ -642,17 +659,19 @@ function HomePage() {
 }
 
 function ShopPage() {
-  const { products, categories, loading } = useProducts();
+  const { products, categories, customCategories, loading } = useProducts();
   const [activeFilter, setActiveFilter] = useState('all');
 
-  const filters = [
-    { id: 'all', name: 'All' },
-    ...categories.map(c => ({ id: c.id || c.name, name: c.name })),
-  ];
+  // Use custom categories if available, fall back to FE categories
+  const filters = customCategories.length > 0
+    ? [{ id: 'all', name: 'All' }, ...customCategories.map(c => ({ id: c.name, name: c.name }))]
+    : [{ id: 'all', name: 'All' }, ...categories.map(c => ({ id: c.id || c.name, name: c.name }))];
 
   const filtered = activeFilter === 'all'
     ? products
-    : products.filter(p => p.category === activeFilter);
+    : customCategories.length > 0
+      ? products.filter(p => (p.customCategories || []).includes(activeFilter))
+      : products.filter(p => p.category === activeFilter);
 
   return (
     <>
@@ -1092,12 +1111,301 @@ function AdminPage() {
   return <AdminDashboard adminPassword={adminPassword} />;
 }
 
+/* ═══ ADMIN PRODUCTS / CATEGORIES ═══ */
+
+function AdminProductsPage({ adminPassword }) {
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [hiddenProductIds, setHiddenProductIds] = useState([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryNameDraft, setCategoryNameDraft] = useState('');
+  const [adminQuery, setAdminQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusMsg, setStatusMsg] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const selectedCategory = categories.find(c => c.id === selectedCategoryId);
+
+  const assignedProductIds = new Set(
+    assignments.filter(a => a.category_id === selectedCategoryId).map(a => a.product_id)
+  );
+
+  const categoryNamesByProduct = new Map();
+  const categoryById = new Map(categories.map(c => [c.id, c.name]));
+  for (const a of assignments) {
+    const name = categoryById.get(a.category_id);
+    if (!name) continue;
+    const current = categoryNamesByProduct.get(a.product_id) || [];
+    current.push(name);
+    categoryNamesByProduct.set(a.product_id, current);
+  }
+
+  const hiddenSet = new Set(hiddenProductIds);
+
+  const counts = products.reduce((acc, p) => {
+    acc.all++;
+    if (categoryNamesByProduct.get(p.id)?.length) acc.categorized++;
+    else acc.uncategorized++;
+    if (assignedProductIds.has(p.id)) acc.inCategory++;
+    return acc;
+  }, { all: 0, categorized: 0, uncategorized: 0, inCategory: 0 });
+
+  const visibleProducts = products.filter(p => {
+    const q = adminQuery.toLowerCase();
+    if (q && !p.name.toLowerCase().includes(q)) return false;
+    if (categoryFilter === 'in-category') return assignedProductIds.has(p.id);
+    if (categoryFilter === 'categorized') return !!categoryNamesByProduct.get(p.id)?.length;
+    if (categoryFilter === 'uncategorized') return !categoryNamesByProduct.get(p.id)?.length;
+    return true;
+  });
+
+  const loadData = async (selectId) => {
+    setLoading(true);
+    try {
+      const [prodRes, catRes] = await Promise.all([
+        fetch('/api/products'),
+        fetch('/api/admin/categories'),
+      ]);
+      const prodData = await prodRes.json();
+      const catData = await catRes.json();
+      setProducts(prodData.products || []);
+      setCategories(catData.categories || []);
+      setAssignments(catData.assignments || []);
+      setHiddenProductIds(catData.hiddenProductIds || []);
+      if (selectId) {
+        setSelectedCategoryId(selectId);
+        const cat = (catData.categories || []).find(c => c.id === selectId);
+        if (cat) setCategoryNameDraft(cat.name);
+      }
+    } catch (err) {
+      setStatusMsg(err.message);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  const adminFetch = async (action, body = {}) => {
+    const res = await fetch('/api/admin/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+      body: JSON.stringify({ action, ...body }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+    return data;
+  };
+
+  const createCategory = async (e) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    try {
+      const data = await adminFetch('createCategory', { name: newCategoryName });
+      setNewCategoryName('');
+      await loadData(data.category?.id);
+      setStatusMsg('Category created');
+    } catch (err) { setStatusMsg(err.message); }
+  };
+
+  const updateCategory = async (e) => {
+    e.preventDefault();
+    if (!selectedCategoryId || !categoryNameDraft.trim() || categoryNameDraft.trim() === selectedCategory?.name) return;
+    try {
+      await adminFetch('updateCategory', { categoryId: selectedCategoryId, name: categoryNameDraft.trim() });
+      await loadData(selectedCategoryId);
+      setStatusMsg('Category updated');
+    } catch (err) { setStatusMsg(err.message); }
+  };
+
+  const deleteCategory = async () => {
+    if (!selectedCategoryId || !confirm('Delete this category?')) return;
+    try {
+      await adminFetch('deleteCategory', { categoryId: selectedCategoryId });
+      setSelectedCategoryId('');
+      setCategoryNameDraft('');
+      await loadData();
+      setStatusMsg('Category deleted');
+    } catch (err) { setStatusMsg(err.message); }
+  };
+
+  const toggleAssignment = async (productId, checked) => {
+    if (!selectedCategoryId) return;
+    // Optimistic update
+    setAssignments(prev => checked
+      ? [...prev, { product_id: productId, category_id: selectedCategoryId }]
+      : prev.filter(a => !(a.product_id === productId && a.category_id === selectedCategoryId))
+    );
+    try {
+      await adminFetch(checked ? 'assignProduct' : 'unassignProduct', {
+        categoryId: selectedCategoryId,
+        productId,
+      });
+    } catch (err) {
+      setStatusMsg(err.message);
+      await loadData(selectedCategoryId);
+    }
+  };
+
+  const toggleHidden = async (productId, hide) => {
+    setHiddenProductIds(prev => hide
+      ? [...new Set([...prev, productId])]
+      : prev.filter(id => id !== productId)
+    );
+    try {
+      await adminFetch(hide ? 'hideProduct' : 'showProduct', { productId });
+    } catch (err) {
+      setStatusMsg(err.message);
+      await loadData(selectedCategoryId);
+    }
+  };
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><Loader size={24} className="spin" /></div>;
+
+  return (
+    <div className="admin-cat-layout">
+      {/* Sidebar: categories */}
+      <div className="admin-cat-sidebar">
+        <form className="admin-cat-create" onSubmit={createCategory}>
+          <label>New Category</label>
+          <input type="text" placeholder="e.g. Hoodies" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} />
+          <button type="submit">Add</button>
+        </form>
+        <div className="admin-cat-list">
+          {categories.map(cat => (
+            <button
+              key={cat.id}
+              className={`admin-cat-item ${cat.id === selectedCategoryId ? 'active' : ''}`}
+              onClick={() => { setSelectedCategoryId(cat.id); setCategoryNameDraft(cat.name); setCategoryFilter('in-category'); }}
+            >
+              <span>{cat.name}</span>
+              <strong>{assignments.filter(a => a.category_id === cat.id).length}</strong>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main: product list */}
+      <div className="admin-cat-main">
+        <div className="admin-cat-head">
+          <div>
+            <h2>{selectedCategory?.name || 'All Products'}</h2>
+            {statusMsg && <p style={{ fontSize: 13, color: 'var(--red)', marginTop: 4 }}>{statusMsg}</p>}
+          </div>
+          <div className="admin-cat-actions">
+            <input type="search" placeholder="Search products..." value={adminQuery} onChange={e => setAdminQuery(e.target.value)} />
+            <button onClick={() => loadData(selectedCategoryId)}>Refresh</button>
+            {selectedCategoryId && <button onClick={deleteCategory} style={{ color: '#e53e3e' }}>Delete Category</button>}
+          </div>
+        </div>
+
+        <div className="admin-cat-filters">
+          {[
+            { value: 'all', label: 'All', count: counts.all },
+            { value: 'in-category', label: 'In Category', count: counts.inCategory },
+            { value: 'categorized', label: 'Categorized', count: counts.categorized },
+            { value: 'uncategorized', label: 'Uncategorized', count: counts.uncategorized },
+          ].map(opt => (
+            <button key={opt.value} className={categoryFilter === opt.value ? 'active' : ''} onClick={() => setCategoryFilter(opt.value)}>
+              {opt.label} <span>{opt.count}</span>
+            </button>
+          ))}
+        </div>
+
+        {selectedCategoryId && (
+          <form className="admin-cat-edit" onSubmit={updateCategory}>
+            <label>Edit category name</label>
+            <div>
+              <input type="text" value={categoryNameDraft} onChange={e => setCategoryNameDraft(e.target.value)} />
+              <button type="submit" disabled={!categoryNameDraft.trim() || categoryNameDraft.trim() === selectedCategory?.name}>Save Name</button>
+            </div>
+          </form>
+        )}
+
+        <div className="admin-cat-products">
+          {visibleProducts.map(product => {
+            const isHidden = hiddenSet.has(product.id);
+            const productCats = categoryNamesByProduct.get(product.id) || [];
+            return (
+              <div key={product.id} className={`admin-cat-product ${isHidden ? 'hidden-product' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={assignedProductIds.has(product.id)}
+                  disabled={!selectedCategoryId}
+                  onChange={e => toggleAssignment(product.id, e.target.checked)}
+                />
+                <img src={product.image} alt="" />
+                <div className="admin-cat-product-info">
+                  <span className="admin-cat-product-name">{product.name}</span>
+                  <div className="admin-cat-tags">
+                    {isHidden && <small className="tag-hidden">Hidden</small>}
+                    {productCats.length ? productCats.map(c => <small key={c}>{c}</small>) : <small className="tag-empty">Uncategorized</small>}
+                  </div>
+                </div>
+                <strong>${product.price.toFixed(2)}</strong>
+                <button className="admin-cat-hide-btn" onClick={() => toggleHidden(product.id, !isHidden)}>
+                  {isHidden ? 'Show' : 'Hide'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminDashboard({ adminPassword }) {
+  const [adminPage, setAdminPage] = useState('orders');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const logout = () => {
+    sessionStorage.removeItem('shift-admin-pw');
+    navigate('/');
+    window.location.reload();
+  };
+
+  return (
+    <div className="admin">
+      <div className="admin-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button className="admin-menu-toggle" onClick={() => setMenuOpen(!menuOpen)}>
+            <Menu size={20} />
+          </button>
+          <img src="/shift-logo.png" alt="Shift" style={{ height: 28, filter: 'brightness(0) invert(1)' }} />
+          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--gray)' }}>Admin</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <a href="/" style={{ fontSize: 12, color: 'var(--gray)', textDecoration: 'none', fontWeight: 600 }}>View Store</a>
+          <button onClick={logout} style={{ background: 'none', border: 'none', color: 'var(--gray)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <LogOut size={16} /> Logout
+          </button>
+        </div>
+      </div>
+
+      {menuOpen && (
+        <div className="admin-menu-overlay" onClick={() => setMenuOpen(false)}>
+          <nav className="admin-menu-panel" onClick={e => e.stopPropagation()}>
+            <button className="admin-menu-close" onClick={() => setMenuOpen(false)}><X size={20} /></button>
+            <button className={adminPage === 'products' ? 'active' : ''} onClick={() => { setAdminPage('products'); setMenuOpen(false); }}>Products</button>
+            <button className={adminPage === 'orders' ? 'active' : ''} onClick={() => { setAdminPage('orders'); setMenuOpen(false); }}>Orders</button>
+          </nav>
+        </div>
+      )}
+
+      {adminPage === 'orders' && <AdminOrdersPage adminPassword={adminPassword} />}
+      {adminPage === 'products' && <AdminProductsPage adminPassword={adminPassword} />}
+    </div>
+  );
+}
+
+function AdminOrdersPage({ adminPassword }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState(null);
-  const navigate = useNavigate();
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -1126,24 +1434,8 @@ function AdminDashboard({ adminPassword }) {
   const statuses = ['all', 'new', 'processing', 'shipped', 'delivered', 'cancelled'];
   const statusColors = { new: '#e53e3e', processing: '#dd6b20', shipped: '#3182ce', delivered: '#38a169', cancelled: '#718096' };
 
-  const logout = () => {
-    sessionStorage.removeItem('shift-admin-pw');
-    navigate('/');
-    window.location.reload();
-  };
-
   return (
-    <div className="admin">
-      <div className="admin-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src="/shift-logo.png" alt="Shift" style={{ height: 28, filter: 'brightness(0) invert(1)' }} />
-          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--gray)' }}>Admin</span>
-        </div>
-        <button onClick={logout} style={{ background: 'none', border: 'none', color: 'var(--gray)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <LogOut size={16} /> Logout
-        </button>
-      </div>
-
+    <>
       <div className="admin-stats">
         {['new', 'processing', 'shipped', 'delivered'].map(s => {
           const count = orders.filter(o => filter === 'all' ? o.status === s : true).length;
@@ -1203,7 +1495,7 @@ function AdminDashboard({ adminPassword }) {
 
         {selected && <AdminOrderDetail order={selected} onUpdate={updateOrder} onClose={() => setSelected(null)} />}
       </div>
-    </div>
+    </>
   );
 }
 
