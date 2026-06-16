@@ -55,6 +55,7 @@ export default async function handler(req, res) {
       success_url: `${origin}/order-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/checkout`,
       metadata: {
+        store: 'shift',
         itemsJson: JSON.stringify(
           items.map(i => ({
             id: i.productId,

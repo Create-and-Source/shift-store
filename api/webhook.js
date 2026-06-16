@@ -90,6 +90,12 @@ export default async function handler(req, res) {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object
 
+    // Only process Shift store checkouts
+    if (session.metadata?.store !== 'shift') {
+      console.log('Ignoring non-Shift checkout:', session.id)
+      return res.status(200).json({ received: true, skipped: true })
+    }
+
     // Idempotency check
     const { data: existingOrder } = await supabase
       .from('orders')
