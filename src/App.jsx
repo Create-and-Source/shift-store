@@ -1049,10 +1049,12 @@ function AdminPage() {
   const [adminPassword, setAdminPassword] = useState(() => sessionStorage.getItem('shift-admin-pw') || '');
   const [draftPassword, setDraftPassword] = useState('');
   const [status, setStatus] = useState('');
+  const [loggingIn, setLoggingIn] = useState(false);
 
   const login = async (e) => {
     e.preventDefault();
     setStatus('');
+    setLoggingIn(true);
     try {
       const res = await fetch('/api/admin/orders?status=all', {
         headers: { 'x-admin-key': draftPassword },
@@ -1063,6 +1065,8 @@ function AdminPage() {
       setAuthed(true);
     } catch (err) {
       setStatus(err.message);
+    } finally {
+      setLoggingIn(false);
     }
   };
 
@@ -1075,7 +1079,9 @@ function AdminPage() {
           <h2>Sign In</h2>
           <form onSubmit={login}>
             <input type="password" placeholder="Admin password" value={draftPassword} onChange={e => setDraftPassword(e.target.value)} />
-            <button type="submit">Enter Admin</button>
+            <button type="submit" disabled={loggingIn}>
+              {loggingIn ? 'Verifying...' : 'Enter Admin'}
+            </button>
           </form>
           {status && <p style={{ color: '#e53e3e', fontSize: 13, marginTop: 12 }}>{status}</p>}
         </div>
