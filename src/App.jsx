@@ -1093,8 +1093,8 @@ function AdminPage() {
     return (
       <div className="admin-login">
         <div className="admin-login-card">
-          <img src="/shift-logo.png" alt="Shift" style={{ height: 32, filter: 'brightness(0) invert(1)', marginBottom: 24 }} />
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--gray)', marginBottom: 4 }}>Shift Admin</p>
+          <img src="/shift-logo.png" alt="Shift" style={{ height: 32, marginBottom: 24 }} />
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#888', marginBottom: 4 }}>Shift Admin</p>
           <h2>Sign In</h2>
           <form onSubmit={login}>
             <input type="password" placeholder="Admin password" value={draftPassword} onChange={e => setDraftPassword(e.target.value)} />
@@ -1374,12 +1374,12 @@ function AdminDashboard({ adminPassword }) {
           <button className="admin-menu-toggle" onClick={() => setMenuOpen(!menuOpen)}>
             <Menu size={20} />
           </button>
-          <img src="/shift-logo.png" alt="Shift" style={{ height: 28, filter: 'brightness(0) invert(1)' }} />
-          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--gray)' }}>Admin</span>
+          <img src="/shift-logo.png" alt="Shift" style={{ height: 28 }} />
+          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#888' }}>Admin</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <a href="/" style={{ fontSize: 12, color: 'var(--gray)', textDecoration: 'none', fontWeight: 600 }}>View Store</a>
-          <button onClick={logout} style={{ background: 'none', border: 'none', color: 'var(--gray)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <a href="/" style={{ fontSize: 12, color: '#888', textDecoration: 'none', fontWeight: 600 }}>View Store</a>
+          <button onClick={logout} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
             <LogOut size={16} /> Logout
           </button>
         </div>
