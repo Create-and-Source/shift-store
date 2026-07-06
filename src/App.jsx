@@ -551,7 +551,7 @@ function HomePage() {
         >
           <h2 className="spread-title"><GlitchText>Meet the Creator</GlitchText></h2>
           <p className="spread-body">
-            The heart of this brand is the belief that life's unexpected turns are opportunities to shift, adapt, and move forward. SHIFT was inspired by my own challenges—from weight loss to facing fears—knowing growth comes from change. We're here to encourage you to pivot with purpose, embrace new paths, and ALWAYS keep moving forward.
+            The heart of this brand is the belief that life's unexpected turns are opportunities to shift, adapt, and move forward. SHIFT was inspired by my own challenges and pivot points in life — knowing growth comes from change. We're here to encourage you to move with purpose, embrace new paths, and ALWAYS keep moving forward. Life keeps moving, so should you.
           </p>
           <Link to="/about" className="spread-link">
             View the Mission <ArrowRight size={14} />
