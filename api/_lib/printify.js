@@ -185,3 +185,40 @@ export async function createPrintifyOrder({ externalId, lineItems, address, ship
 export async function sendPrintifyToProduction(orderId) {
   return pf(`/shops/${SHOP_ID}/orders/${orderId}/send_to_production.json`, { method: 'POST' })
 }
+
+// ─── Shipping rates ─────────────────────────────────────────────────────
+
+// The store ships US-only, and Printify's US "standard" rate is provider-set
+// and uniform across the mainland, so a representative US address yields the
+// correct live rate without collecting the buyer's address up front.
+export const US_RATE_ADDRESS = {
+  country: 'US',
+  region: 'CA',
+  address1: '1 Market St',
+  address2: '',
+  city: 'San Francisco',
+  zip: '94105',
+}
+
+// Raw rates from Printify (values in cents), e.g. { standard, express, ... }.
+export async function getPrintifyShipping(lineItems, address = US_RATE_ADDRESS) {
+  return pf(`/shops/${SHOP_ID}/orders/shipping.json`, {
+    method: 'POST',
+    body: JSON.stringify({ line_items: lineItems, address_to: address }),
+  })
+}
+
+// Prefer the standard rate; fall back to the cheapest offered method.
+export function pickStandardUsd(rates) {
+  if (!rates || typeof rates !== 'object') return null
+  if (typeof rates.standard === 'number') return rates.standard / 100
+  const cents = [rates.economy, rates.priority, rates.express, rates.printify_express]
+    .filter(v => typeof v === 'number')
+  return cents.length ? Math.min(...cents) / 100 : null
+}
+
+// Standard shipping in dollars for the given Printify line items, or null.
+export async function getPrintifyStandardShipping(lineItems, address) {
+  const rates = await getPrintifyShipping(lineItems, address)
+  return pickStandardUsd(rates)
+}
