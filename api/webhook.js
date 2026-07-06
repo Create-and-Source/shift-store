@@ -1,5 +1,11 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import {
+  printifyEnabled,
+  createPrintifyOrder,
+  sendPrintifyToProduction,
+  toPrintifyAddress,
+} from './_lib/printify.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
@@ -180,6 +186,48 @@ export default async function handler(req, res) {
     }
 
     console.log('Order created:', order.id, 'for', customerEmail)
+
+    // ─── Printify fulfillment ───────────────────────────────────────────
+    // Reassemble the chunked routing (pf0..pfN) set by create-checkout and,
+    // for any Printify line items, create + auto-submit the order to Printify
+    // for production. Entirely best-effort: it never blocks the 200 response,
+    // and no-ops when Printify is unconfigured or the cart had no Printify
+    // items — so Fulfill Engine / static orders are unaffected.
+    try {
+      let printifyRoute = []
+      const chunkCount = parseInt(session.metadata?.pfn || '0', 10)
+      if (chunkCount > 0) {
+        let routeStr = ''
+        for (let i = 0; i < chunkCount; i++) routeStr += session.metadata[`pf${i}`] || ''
+        printifyRoute = JSON.parse(routeStr)
+      }
+
+      if (printifyRoute.length && printifyEnabled()) {
+        const lineItems = printifyRoute.map(r => ({
+          product_id: r.pp,
+          variant_id: Number(r.pv),
+          quantity: r.q,
+        }))
+
+        const pfOrder = await createPrintifyOrder({
+          externalId: order.id,
+          lineItems,
+          address: toPrintifyAddress(shippingAddress, customerEmail),
+        })
+
+        await sendPrintifyToProduction(pfOrder.id)
+        console.log('Printify order submitted:', pfOrder.id, 'for order', order.id)
+
+        // Best-effort backlink; ignore if the column doesn't exist yet.
+        const { error: linkErr } = await supabase
+          .from('orders')
+          .update({ printify_order_id: pfOrder.id })
+          .eq('id', order.id)
+        if (linkErr) console.error('Printify backlink (non-fatal):', linkErr.message)
+      }
+    } catch (pfErr) {
+      console.error('Printify fulfillment failed (non-fatal):', pfErr.message, pfErr.body || '')
+    }
   }
 
   return res.status(200).json({ received: true })
