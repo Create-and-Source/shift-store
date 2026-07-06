@@ -59,6 +59,12 @@ async function pf(path, options = {}) {
   return body
 }
 
+// ─── Shops ──────────────────────────────────────────────────────────────
+
+export async function listShops() {
+  return pf('/shops.json')
+}
+
 // ─── Products ───────────────────────────────────────────────────────────
 
 export async function listPrintifyProducts() {
