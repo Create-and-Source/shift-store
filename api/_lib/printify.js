@@ -1,15 +1,36 @@
 // ─── Printify REST client ───────────────────────────────────────────────
 // Files under /api that start with "_" are NOT deployed as routes by Vercel,
-// so this is a shared helper only. Everything here is a no-op unless both
-// PRINTIFY_API_TOKEN and PRINTIFY_SHOP_ID are set — that keeps Printify
-// completely inert (and the store unaffected) until the credentials exist.
+// so this is a shared helper only. Everything here is a no-op unless
+// PRINTIFY_API_TOKEN is set — that keeps Printify completely inert (and the
+// store unaffected) until the credential exists.
 
 const BASE = 'https://api.printify.com/v1'
 const TOKEN = process.env.PRINTIFY_API_TOKEN
-const SHOP_ID = process.env.PRINTIFY_SHOP_ID
+
+// Shop id is OPTIONAL: if PRINTIFY_SHOP_ID is set it's used directly;
+// otherwise it's auto-resolved from the token (the account's first shop) and
+// cached for the function's lifetime — so the token alone is enough to run.
+let SHOP_ID = process.env.PRINTIFY_SHOP_ID || null
+let shopIdPromise = null
 
 export function printifyEnabled() {
-  return Boolean(TOKEN && SHOP_ID)
+  return Boolean(TOKEN)
+}
+
+async function getShopId() {
+  if (SHOP_ID) return SHOP_ID
+  if (!shopIdPromise) {
+    shopIdPromise = pf('/shops.json')
+      .then(shops => {
+        if (!Array.isArray(shops) || !shops.length) {
+          throw new Error('No Printify shops found for this token')
+        }
+        SHOP_ID = String(shops[0].id)
+        return SHOP_ID
+      })
+      .catch(err => { shopIdPromise = null; throw err })
+  }
+  return shopIdPromise
 }
 
 async function pf(path, options = {}) {
@@ -41,11 +62,12 @@ async function pf(path, options = {}) {
 // ─── Products ───────────────────────────────────────────────────────────
 
 export async function listPrintifyProducts() {
+  const shopId = await getShopId()
   const all = []
   let page = 1
   // Paginate defensively; cap at 20 pages (2000 products) as a safety stop.
   while (page <= 20) {
-    const data = await pf(`/shops/${SHOP_ID}/products.json?limit=100&page=${page}`)
+    const data = await pf(`/shops/${shopId}/products.json?limit=100&page=${page}`)
     const items = data?.data || []
     all.push(...items)
     if (!data?.next_page_url || items.length === 0) break
@@ -169,7 +191,8 @@ export function toPrintifyAddress(shippingAddress = {}, email = '') {
 }
 
 export async function createPrintifyOrder({ externalId, lineItems, address, shippingMethod = 1 }) {
-  return pf(`/shops/${SHOP_ID}/orders.json`, {
+  const shopId = await getShopId()
+  return pf(`/shops/${shopId}/orders.json`, {
     method: 'POST',
     body: JSON.stringify({
       external_id: String(externalId),
@@ -183,7 +206,8 @@ export async function createPrintifyOrder({ externalId, lineItems, address, ship
 }
 
 export async function sendPrintifyToProduction(orderId) {
-  return pf(`/shops/${SHOP_ID}/orders/${orderId}/send_to_production.json`, { method: 'POST' })
+  const shopId = await getShopId()
+  return pf(`/shops/${shopId}/orders/${orderId}/send_to_production.json`, { method: 'POST' })
 }
 
 // ─── Shipping rates ─────────────────────────────────────────────────────
@@ -202,7 +226,8 @@ export const US_RATE_ADDRESS = {
 
 // Raw rates from Printify (values in cents), e.g. { standard, express, ... }.
 export async function getPrintifyShipping(lineItems, address = US_RATE_ADDRESS) {
-  return pf(`/shops/${SHOP_ID}/orders/shipping.json`, {
+  const shopId = await getShopId()
+  return pf(`/shops/${shopId}/orders/shipping.json`, {
     method: 'POST',
     body: JSON.stringify({ line_items: lineItems, address_to: address }),
   })
