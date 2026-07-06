@@ -66,8 +66,9 @@ export async function listPrintifyProducts() {
   const all = []
   let page = 1
   // Paginate defensively; cap at 20 pages (2000 products) as a safety stop.
-  while (page <= 20) {
-    const data = await pf(`/shops/${shopId}/products.json?limit=100&page=${page}`)
+  while (page <= 40) {
+    // Printify caps the products limit at 50 per page (lowered from 100 in 2024).
+    const data = await pf(`/shops/${shopId}/products.json?limit=50&page=${page}`)
     const items = data?.data || []
     all.push(...items)
     if (!data?.next_page_url || items.length === 0) break
