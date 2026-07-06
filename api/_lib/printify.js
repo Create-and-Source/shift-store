@@ -25,7 +25,11 @@ async function getShopId() {
         if (!Array.isArray(shops) || !shops.length) {
           throw new Error('No Printify shops found for this token')
         }
-        SHOP_ID = String(shops[0].id)
+        // This account has multiple brand shops; prefer the one whose title
+        // mentions "shift" (the SHIFT Apparel store). Set PRINTIFY_SHOP_ID to
+        // override explicitly. Falls back to the first shop only if none match.
+        const shift = shops.find(s => /shift/i.test(s.title || ''))
+        SHOP_ID = String((shift || shops[0]).id)
         return SHOP_ID
       })
       .catch(err => { shopIdPromise = null; throw err })
