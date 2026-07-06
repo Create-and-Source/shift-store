@@ -1,8 +1,12 @@
 import Stripe from 'stripe'
+import { printifyEnabled, getPrintifyStandardShipping } from './_lib/printify.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
 })
+
+// Flat shipping for non-Printify (Fulfill Engine / static) items.
+const FLAT_SHIPPING = 10
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -33,16 +37,37 @@ export default async function handler(req, res) {
       }
     })
 
-    if (shipping > 0) {
-      lineItems.push({
-        price_data: {
-          currency: 'usd',
-          product_data: { name: 'Shipping' },
-          unit_amount: Math.round(shipping * 100),
-        },
-        quantity: 1,
-      })
+    // Authoritative shipping, computed server-side (never trust the client):
+    // live Printify rate for Printify items + a flat rate for any items from
+    // other providers (they ship as a separate parcel). Falls back to flat on
+    // any Printify error so checkout is never blocked.
+    const flatBase = typeof shipping === 'number' && shipping > 0 ? shipping : FLAT_SHIPPING
+    const printifyLineItems = items
+      .filter(i => i.source === 'printify' && i.printifyProductId && i.printifyVariantId)
+      .map(i => ({ product_id: i.printifyProductId, variant_id: Number(i.printifyVariantId), quantity: i.qty }))
+    const hasOther = items.some(i => (i.source || 'static') !== 'printify')
+
+    let shippingCost = 0
+    if (printifyLineItems.length && printifyEnabled()) {
+      try {
+        const pfShip = await getPrintifyStandardShipping(printifyLineItems)
+        shippingCost += pfShip != null ? pfShip : flatBase
+      } catch (err) {
+        console.error('Printify shipping calc failed, using flat:', err.message)
+        shippingCost += flatBase
+      }
     }
+    if (hasOther) shippingCost += flatBase
+    if (shippingCost <= 0) shippingCost = flatBase // safety net
+
+    lineItems.push({
+      price_data: {
+        currency: 'usd',
+        product_data: { name: 'Shipping' },
+        unit_amount: Math.round(shippingCost * 100),
+      },
+      quantity: 1,
+    })
 
     const origin = req.headers.origin || 'https://shift-store.vercel.app'
 

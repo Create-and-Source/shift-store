@@ -934,11 +934,44 @@ function AboutPage() {
   );
 }
 
+const FLAT_SHIPPING = 10;
+
 function CheckoutPage() {
   const { cart, updateQty, cartTotal, checkout, checkingOut } = useCart();
   const { products } = useProducts();
   const navigate = useNavigate();
   const [selectedSuggestion, setSelectedSuggestion] = useState(null);
+
+  // Live shipping: real Printify rate for Printify items + flat for others.
+  const hasPrintify = cart.some(i => i.product.source === 'printify');
+  const hasOther = cart.some(i => (i.product.source || 'static') !== 'printify');
+  const [pfShipping, setPfShipping] = useState(null);
+  const [shipLoading, setShipLoading] = useState(hasPrintify);
+
+  useEffect(() => {
+    if (!hasPrintify) { setPfShipping(0); setShipLoading(false); return; }
+    let cancelled = false;
+    setShipLoading(true);
+    fetch('/api/printify/shipping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: cart.map(i => ({
+          source: i.product.source || 'static',
+          printifyProductId: i.product.printifyProductId || '',
+          printifyVariantId: i.printifyVariantId || 0,
+          qty: i.qty,
+        })),
+      }),
+    })
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setPfShipping(typeof d.shipping === 'number' ? d.shipping : FLAT_SHIPPING); })
+      .catch(() => { if (!cancelled) setPfShipping(FLAT_SHIPPING); })
+      .finally(() => { if (!cancelled) setShipLoading(false); });
+    return () => { cancelled = true; };
+  }, [cart, hasPrintify]);
+
+  const shippingTotal = (hasPrintify ? (pfShipping ?? FLAT_SHIPPING) : 0) + (hasOther ? FLAT_SHIPPING : 0);
 
   const cartProductIds = new Set(cart.map(i => i.product.id));
   const suggestions = products.filter(p => !cartProductIds.has(p.id)).slice(0, 6);
@@ -999,11 +1032,15 @@ function CheckoutPage() {
               </div>
               <div className="ck-summary-row">
                 <span>Shipping</span>
-                <span style={{ fontSize: 12, color: 'var(--gray)' }}>Calculated at payment</span>
+                {!hasPrintify
+                  ? <span style={{ fontSize: 12, color: 'var(--gray)' }}>Calculated at payment</span>
+                  : shipLoading
+                    ? <span style={{ fontSize: 12, color: 'var(--gray)' }}>Calculating…</span>
+                    : <span>${shippingTotal.toFixed(2)}</span>}
               </div>
               <div className="ck-summary-row ck-summary-total">
-                <span>Estimated Total</span>
-                <span>${cartTotal.toFixed(2)}</span>
+                <span>{hasPrintify && !shipLoading ? 'Total' : 'Estimated Total'}</span>
+                <span>${(cartTotal + (hasPrintify && !shipLoading ? shippingTotal : 0)).toFixed(2)}</span>
               </div>
               <button className="ck-pay-btn" onClick={checkout} disabled={checkingOut}>
                 {checkingOut ? <><Loader size={14} className="spin" /> Processing...</> : <>Pay Now <ArrowRight size={14} /></>}
@@ -1018,7 +1055,7 @@ function CheckoutPage() {
         {suggestions.length > 0 && (
           <div className="ck-suggestions">
             <h3 style={{ fontSize: 16, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Add to Your Order</h3>
-            <p style={{ fontSize: 13, color: 'var(--gray)', marginBottom: 24 }}>Same flat rate shipping no matter how many items you add.</p>
+            <p style={{ fontSize: 13, color: 'var(--gray)', marginBottom: 24 }}>Complete the look before you check out.</p>
             <div className="ck-suggestions-grid">
               {suggestions.map(p => (
                 <div key={p.id} className="ck-suggestion" onClick={() => navigate(`/product/${p.id}`)}>
