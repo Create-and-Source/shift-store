@@ -1,0 +1,187 @@
+// ─── Printify REST client ───────────────────────────────────────────────
+// Files under /api that start with "_" are NOT deployed as routes by Vercel,
+// so this is a shared helper only. Everything here is a no-op unless both
+// PRINTIFY_API_TOKEN and PRINTIFY_SHOP_ID are set — that keeps Printify
+// completely inert (and the store unaffected) until the credentials exist.
+
+const BASE = 'https://api.printify.com/v1'
+const TOKEN = process.env.PRINTIFY_API_TOKEN
+const SHOP_ID = process.env.PRINTIFY_SHOP_ID
+
+export function printifyEnabled() {
+  return Boolean(TOKEN && SHOP_ID)
+}
+
+async function pf(path, options = {}) {
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${TOKEN}`,
+      'Content-Type': 'application/json',
+      // Printify requires a User-Agent identifying the app.
+      'User-Agent': 'SHIFT Store (createandsource.com)',
+      ...(options.headers || {}),
+    },
+  })
+
+  const text = await res.text()
+  let body = null
+  try { body = text ? JSON.parse(text) : null } catch { body = text }
+
+  if (!res.ok) {
+    const msg = body?.message || body?.error || `Printify ${res.status}`
+    const err = new Error(msg)
+    err.status = res.status
+    err.body = body
+    throw err
+  }
+  return body
+}
+
+// ─── Products ───────────────────────────────────────────────────────────
+
+export async function listPrintifyProducts() {
+  const all = []
+  let page = 1
+  // Paginate defensively; cap at 20 pages (2000 products) as a safety stop.
+  while (page <= 20) {
+    const data = await pf(`/shops/${SHOP_ID}/products.json?limit=100&page=${page}`)
+    const items = data?.data || []
+    all.push(...items)
+    if (!data?.next_page_url || items.length === 0) break
+    page++
+  }
+  return all
+}
+
+// Normalize a raw Printify product into the shape the storefront UI expects
+// (matching api/products.js from Fulfill Engine), plus the fields the webhook
+// needs to route fulfillment: `source`, `printifyProductId`, and `variantMap`
+// (a "Color|Size" -> variant_id lookup).
+export function mapPrintifyProduct(p) {
+  const options = p.options || []
+  const colorOpt = options.find(o => o.type === 'color' || /colou?r/i.test(o.name || ''))
+  const sizeOpt = options.find(o => o.type === 'size' || /size/i.test(o.name || ''))
+  const colorValues = new Map((colorOpt?.values || []).map(v => [v.id, v]))
+  const sizeValues = new Map((sizeOpt?.values || []).map(v => [v.id, v]))
+
+  const enabledVariants = (p.variants || []).filter(v => v.is_enabled)
+
+  const variantInfo = enabledVariants.map(v => {
+    let colorVal, sizeVal
+    for (const id of v.options || []) {
+      if (colorValues.has(id)) colorVal = colorValues.get(id)
+      if (sizeValues.has(id)) sizeVal = sizeValues.get(id)
+    }
+    return {
+      id: v.id,
+      color: colorVal?.title || 'Default',
+      colorHex: colorVal?.colors?.[0] || '#0A0A0A',
+      size: sizeVal?.title || 'One Size',
+      price: (v.price || 0) / 100,
+      available: v.is_available !== false,
+    }
+  })
+
+  // Map each variant id to its mockup image srcs.
+  const imagesByVariant = new Map()
+  for (const img of p.images || []) {
+    for (const vid of img.variant_ids || []) {
+      const arr = imagesByVariant.get(vid) || []
+      arr.push(img.src)
+      imagesByVariant.set(vid, arr)
+    }
+  }
+
+  const prices = variantInfo.map(v => v.price).filter(n => n > 0)
+  const basePrice = prices.length ? Math.min(...prices) : 0
+
+  const colorsMap = new Map()
+  const sizesMap = new Map()
+  const variantMap = {}
+
+  for (const v of variantInfo) {
+    variantMap[`${v.color}|${v.size}`] = v.id
+
+    if (!colorsMap.has(v.color)) {
+      colorsMap.set(v.color, { name: v.color, hex: v.colorHex, images: [] })
+    }
+    const colorEntry = colorsMap.get(v.color)
+    for (const src of imagesByVariant.get(v.id) || []) {
+      if (!colorEntry.images.find(im => im.url === src)) {
+        colorEntry.images.push({ url: src, zoom: src, thumbnail: src, type: 'mockup' })
+      }
+    }
+
+    if (!sizesMap.has(v.size)) {
+      sizesMap.set(v.size, { name: v.size, surcharge: Math.max(0, +(v.price - basePrice).toFixed(2)) })
+    }
+  }
+
+  const defaultImg =
+    (p.images || []).find(i => i.is_default)?.src || (p.images || [])[0]?.src || ''
+
+  const colors = [...colorsMap.values()]
+  colors.forEach(c => {
+    if (c.images.length === 0 && defaultImg) {
+      c.images.push({ url: defaultImg, zoom: defaultImg, thumbnail: defaultImg, type: 'mockup' })
+    }
+  })
+
+  return {
+    id: `pf-${p.id}`, // prefix avoids id collisions with Fulfill Engine products
+    printifyProductId: p.id,
+    source: 'printify',
+    name: p.title,
+    description: (p.description || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(),
+    price: basePrice,
+    basePrice,
+    colors: colors.length
+      ? colors
+      : [{ name: 'Default', hex: '#0A0A0A', images: defaultImg ? [{ url: defaultImg, zoom: defaultImg, thumbnail: defaultImg, type: 'mockup' }] : [] }],
+    sizes: [...sizesMap.values()],
+    image: defaultImg,
+    specUrl: '',
+    variantMap,
+  }
+}
+
+// ─── Orders / fulfillment ───────────────────────────────────────────────
+
+// Convert Stripe's flattened shipping address into Printify's address_to.
+export function toPrintifyAddress(shippingAddress = {}, email = '') {
+  const name = (shippingAddress.name || '').trim()
+  const parts = name.split(/\s+/).filter(Boolean)
+  const first = parts.shift() || 'Customer'
+  const last = parts.join(' ') || '-'
+  return {
+    first_name: first,
+    last_name: last,
+    email: email || '',
+    phone: shippingAddress.phone || '',
+    country: shippingAddress.country || 'US',
+    region: shippingAddress.state || '',
+    address1: shippingAddress.line1 || '',
+    address2: shippingAddress.line2 || '',
+    city: shippingAddress.city || '',
+    zip: shippingAddress.postal_code || '',
+  }
+}
+
+export async function createPrintifyOrder({ externalId, lineItems, address, shippingMethod = 1 }) {
+  return pf(`/shops/${SHOP_ID}/orders.json`, {
+    method: 'POST',
+    body: JSON.stringify({
+      external_id: String(externalId),
+      label: `SHIFT #${externalId}`,
+      line_items: lineItems,
+      shipping_method: shippingMethod, // 1 = standard
+      send_shipping_notification: false,
+      address_to: address,
+    }),
+  })
+}
+
+export async function sendPrintifyToProduction(orderId) {
+  return pf(`/shops/${SHOP_ID}/orders/${orderId}/send_to_production.json`, { method: 'POST' })
+}

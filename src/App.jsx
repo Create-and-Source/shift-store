@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader, Package, Truck, Eye, LogOut, Lock, Mail, Clock, Search } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
-/* ═══ PRODUCTS CONTEXT — fetches from Fulfill Engine ═══ */
+/* ═══ PRODUCTS CONTEXT — merges Fulfill Engine + Printify ═══ */
 const ProductsContext = createContext();
 
 function ProductsProvider({ children }) {
@@ -15,11 +15,14 @@ function ProductsProvider({ children }) {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/products').then(r => r.json()),
-      fetch('/api/admin/categories').then(r => r.json()),
-    ]).then(([prodData, catData]) => {
+      fetch('/api/products').then(r => r.json()).catch(() => ({ products: [] })),
+      fetch('/api/admin/categories').then(r => r.json()).catch(() => ({})),
+      fetch('/api/printify/products').then(r => r.json()).catch(() => ({ products: [] })),
+    ]).then(([prodData, catData, pfData]) => {
       const hidden = new Set(catData.hiddenProductIds || []);
-      const allProducts = (prodData.products || []).filter(p => !hidden.has(p.id));
+      const feProducts = (prodData.products || []).map(p => ({ ...p, source: p.source || 'fulfillengine' }));
+      const pfProducts = (pfData.products || []);
+      const allProducts = [...feProducts, ...pfProducts].filter(p => !hidden.has(p.id));
 
       // Attach custom categories to each product
       const assignMap = new Map();
@@ -105,10 +108,13 @@ function CartProvider({ children }) {
   const addToCart = (product, color, size, image, sizeSurcharge = 0) => {
     const key = `${product.id}-${color}-${size}`;
     const price = product.price + sizeSurcharge;
+    // For Printify products, resolve the chosen color+size to its variant_id
+    // so the webhook can submit the order to Printify for production.
+    const printifyVariantId = product.variantMap?.[`${color}|${size}`] ?? null;
     setCart(prev => {
       const existing = prev.find(i => i.key === key);
       if (existing) return prev.map(i => i.key === key ? { ...i, qty: i.qty + 1 } : i);
-      return [...prev, { key, product, color, size, image, price, qty: 1 }];
+      return [...prev, { key, product, color, size, image, price, qty: 1, printifyVariantId }];
     });
     setCartOpen(true);
   };
@@ -138,6 +144,9 @@ function CartProvider({ children }) {
             color: i.color,
             size: i.size,
             image: i.image,
+            source: i.product.source || 'static',
+            printifyProductId: i.product.printifyProductId || '',
+            printifyVariantId: i.printifyVariantId || 0,
           })),
           shipping: 10,
           customerEmail: user?.email || '',

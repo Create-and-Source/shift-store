@@ -46,6 +46,24 @@ export default async function handler(req, res) {
 
     const origin = req.headers.origin || 'https://shift-store.vercel.app'
 
+    // Printify fulfillment routing — carried in metadata so the webhook can
+    // submit an order to Printify. Only Printify line items are included, and
+    // because the payload can exceed Stripe's 500-char-per-key metadata limit
+    // it is chunked across pf0..pfN keys (pfn = chunk count). This is purely
+    // additive: itemsJson (used for the Supabase order) is unchanged.
+    const printifyRoute = items
+      .filter(i => i.source === 'printify' && i.printifyProductId && i.printifyVariantId)
+      .map(i => ({ pp: i.printifyProductId, pv: i.printifyVariantId, q: i.qty }))
+
+    const printifyMeta = {}
+    if (printifyRoute.length) {
+      const routeStr = JSON.stringify(printifyRoute)
+      const chunks = []
+      for (let i = 0; i < routeStr.length; i += 480) chunks.push(routeStr.slice(i, i + 480))
+      printifyMeta.pfn = String(chunks.length)
+      chunks.forEach((c, idx) => { printifyMeta[`pf${idx}`] = c })
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
@@ -65,6 +83,7 @@ export default async function handler(req, res) {
             n: i.name,
           }))
         ).substring(0, 500),
+        ...printifyMeta,
       },
     })
 
