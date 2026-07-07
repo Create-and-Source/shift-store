@@ -89,6 +89,22 @@ export default async function handler(req, res) {
       chunks.forEach((c, idx) => { printifyMeta[`pf${idx}`] = c })
     }
 
+    // Shopify fulfillment routing — the webhook creates a paid order in the
+    // Shopify admin for these items. `printifyVariantId` carries the source's
+    // variant id generically (a Shopify variant gid for Shopify items).
+    const shopifyRoute = items
+      .filter(i => i.source === 'shopify' && i.printifyVariantId)
+      .map(i => ({ v: i.printifyVariantId, q: i.qty }))
+
+    const shopifyMeta = {}
+    if (shopifyRoute.length) {
+      const routeStr = JSON.stringify(shopifyRoute)
+      const chunks = []
+      for (let i = 0; i < routeStr.length; i += 480) chunks.push(routeStr.slice(i, i + 480))
+      shopifyMeta.sfn = String(chunks.length)
+      chunks.forEach((c, idx) => { shopifyMeta[`sf${idx}`] = c })
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
@@ -109,6 +125,7 @@ export default async function handler(req, res) {
           }))
         ).substring(0, 500),
         ...printifyMeta,
+        ...shopifyMeta,
       },
     })
 

@@ -6,9 +6,15 @@
 const API_VERSION = '2026-07'
 const DOMAIN = process.env.SHOPIFY_STORE_DOMAIN // e.g. "shift.myshopify.com"
 const TOKEN = process.env.SHOPIFY_STOREFRONT_TOKEN
+const ADMIN_TOKEN = process.env.SHOPIFY_ADMIN_TOKEN
 
 export function shopifyEnabled() {
   return Boolean(DOMAIN && TOKEN)
+}
+
+// Order creation needs the Admin API (a separate, secret token with write_orders).
+export function shopifyAdminEnabled() {
+  return Boolean(DOMAIN && ADMIN_TOKEN)
 }
 
 async function sf(query, variables = {}) {
@@ -183,4 +189,81 @@ export function mapShopifyProduct(p) {
     specUrl: '',
     variantMap,
   }
+}
+
+// ─── Admin API — order creation (fulfillment) ───────────────────────────
+
+async function adminGql(query, variables = {}) {
+  const url = `https://${DOMAIN}/admin/api/${API_VERSION}/graphql.json`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': ADMIN_TOKEN,
+    },
+    body: JSON.stringify({ query, variables }),
+  })
+
+  const text = await res.text()
+  let body = null
+  try { body = text ? JSON.parse(text) : null } catch { body = text }
+
+  if (!res.ok) {
+    const err = new Error(body?.errors?.[0]?.message || `Shopify Admin ${res.status}`)
+    err.status = res.status
+    err.body = body
+    throw err
+  }
+  if (body?.errors?.length) {
+    const err = new Error(body.errors[0]?.message || 'Shopify Admin GraphQL error')
+    err.body = body.errors
+    throw err
+  }
+  return body?.data
+}
+
+// Convert Stripe's flattened shipping address into Shopify's MailingAddressInput.
+function toShopifyAddress(shippingAddress = {}) {
+  const name = (shippingAddress.name || '').trim()
+  const parts = name.split(/\s+/).filter(Boolean)
+  const addr = {
+    firstName: parts.shift() || 'Customer',
+    lastName: parts.join(' ') || '-',
+    address1: shippingAddress.line1 || '',
+    city: shippingAddress.city || '',
+    countryCode: shippingAddress.country || 'US',
+    zip: shippingAddress.postal_code || '',
+  }
+  if (shippingAddress.line2) addr.address2 = shippingAddress.line2
+  if (shippingAddress.state) addr.provinceCode = shippingAddress.state
+  if (shippingAddress.phone) addr.phone = shippingAddress.phone
+  return addr
+}
+
+const ORDER_CREATE = `
+mutation orderCreate($order: OrderCreateOrderInput!) {
+  orderCreate(order: $order) {
+    userErrors { field message }
+    order { id name }
+  }
+}`
+
+// Create a PAID order in the Shopify admin so it can be fulfilled there.
+// lineItems: [{ variantId (gid://shopify/ProductVariant/...), quantity }]
+export async function createShopifyOrder({ email, lineItems, shippingAddress }) {
+  const order = {
+    financialStatus: 'PAID',
+    lineItems: lineItems.map(li => ({ variantId: li.variantId, quantity: li.quantity })),
+  }
+  if (email) order.email = email
+  if (shippingAddress) order.shippingAddress = toShopifyAddress(shippingAddress)
+
+  const data = await adminGql(ORDER_CREATE, { order })
+  const userErrors = data?.orderCreate?.userErrors || []
+  if (userErrors.length) {
+    const err = new Error('Shopify orderCreate: ' + userErrors.map(e => e.message).join('; '))
+    err.body = userErrors
+    throw err
+  }
+  return data?.orderCreate?.order
 }

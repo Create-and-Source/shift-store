@@ -6,6 +6,7 @@ import {
   sendPrintifyToProduction,
   toPrintifyAddress,
 } from './_lib/printify.js'
+import { shopifyAdminEnabled, createShopifyOrder } from './_lib/shopify.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
@@ -227,6 +228,42 @@ export default async function handler(req, res) {
       }
     } catch (pfErr) {
       console.error('Printify fulfillment failed (non-fatal):', pfErr.message, pfErr.body || '')
+    }
+
+    // ─── Shopify fulfillment ────────────────────────────────────────────
+    // Reassemble the chunked routing (sf0..sfN) and, for any Shopify line
+    // items, create a PAID order in the Shopify admin so it can be fulfilled
+    // there. Best-effort and non-blocking; no-ops without the admin token or
+    // when the cart had no Shopify items.
+    try {
+      let shopifyRoute = []
+      const chunkCount = parseInt(session.metadata?.sfn || '0', 10)
+      if (chunkCount > 0) {
+        let routeStr = ''
+        for (let i = 0; i < chunkCount; i++) routeStr += session.metadata[`sf${i}`] || ''
+        shopifyRoute = JSON.parse(routeStr)
+      }
+
+      if (shopifyRoute.length && shopifyAdminEnabled()) {
+        const lineItems = shopifyRoute.map(r => ({ variantId: r.v, quantity: r.q }))
+
+        const shOrder = await createShopifyOrder({
+          email: customerEmail,
+          lineItems,
+          shippingAddress,
+        })
+
+        console.log('Shopify order created:', shOrder?.id, shOrder?.name, 'for order', order.id)
+
+        // Best-effort backlink; ignore if the column doesn't exist yet.
+        const { error: linkErr } = await supabase
+          .from('orders')
+          .update({ shopify_order_id: shOrder?.id })
+          .eq('id', order.id)
+        if (linkErr) console.error('Shopify backlink (non-fatal):', linkErr.message)
+      }
+    } catch (shErr) {
+      console.error('Shopify fulfillment failed (non-fatal):', shErr.message, shErr.body || '')
     }
   }
 
