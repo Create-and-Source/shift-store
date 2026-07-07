@@ -438,7 +438,9 @@ function thumb(url, width) {
   if (!url || typeof url !== 'string') return url;
   if (url.includes('/storage/v1/object/public/')) {
     const t = url.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
-    return t + (t.includes('?') ? '&' : '?') + `width=${width}&quality=70`;
+    // resize=contain + a tall height cap keeps the real aspect ratio (width-only
+    // squishes to the original height); returns e.g. 500x632, not a distorted 500x1400.
+    return t + (t.includes('?') ? '&' : '?') + `width=${width}&height=${width * 3}&resize=contain&quality=70`;
   }
   return url;
 }
