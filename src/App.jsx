@@ -1643,6 +1643,31 @@ function AdminMediaPage({ adminPassword }) {
     await post('/api/admin/content', { action: 'clearOverride', productId });
     await load();
   });
+  // Persist a new ordering (or empty = clear) of a product's uploaded mockups.
+  const saveOverrideImages = (product, imageUrls) => withBusy('Saving…', async () => {
+    const cur = overrides[product.id] || {};
+    if (imageUrls.length === 0) {
+      await post('/api/admin/content', { action: 'clearOverride', productId: product.id });
+    } else {
+      await post('/api/admin/content', {
+        action: 'setOverride', productId: product.id, imageUrls,
+        name: cur.name || null, price: cur.price ?? null,
+      });
+    }
+    await load();
+  });
+  const moveOverrideImage = (product, index, dir) => {
+    const arr = [...(overrides[product.id]?.image_urls || [])];
+    const j = index + dir;
+    if (j < 0 || j >= arr.length) return;
+    [arr[index], arr[j]] = [arr[j], arr[index]];
+    saveOverrideImages(product, arr);
+  };
+  const removeOverrideImage = (product, index) => {
+    const arr = [...(overrides[product.id]?.image_urls || [])];
+    arr.splice(index, 1);
+    saveOverrideImages(product, arr);
+  };
 
   if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><Loader size={24} className="spin" /></div>;
 
@@ -1726,28 +1751,35 @@ function AdminMediaPage({ adminPassword }) {
       {/* ── Product Photos (overrides) ── */}
       {section === 'overrides' && (
         <div className="admin-media-body">
-          <p className="admin-media-hint">Add your own mockups to a product. They show first, <strong>alongside</strong> the original photos — on the product card and page. “Remove” clears just the ones you added.</p>
+          <p className="admin-media-hint">Add your own mockups to any product. Use the <strong>‹ ›</strong> arrows to order them — the first one leads on the storefront — and <strong>×</strong> to delete. Your photos show <strong>alongside</strong> the originals.</p>
           <input className="admin-media-search" placeholder="Search products…" value={ovSearch} onChange={e => setOvSearch(e.target.value)} />
-          <div className="admin-media-grid">
+          <div className="admin-photo-list">
             {filteredFeed.map(p => {
-              const ov = overrides[p.id];
-              const hasOverride = ov && ov.image_urls && ov.image_urls.length;
-              const thumb = hasOverride ? ov.image_urls[0] : (p.image || p.colors?.[0]?.images?.[0]?.url);
+              const imgs = overrides[p.id]?.image_urls || [];
+              const original = p.image || p.colors?.[0]?.images?.[0]?.url;
               return (
-                <div key={p.id} className={`admin-media-card ${hasOverride ? 'has-override' : ''}`}>
-                  <div className="admin-media-thumb" style={thumb ? { backgroundImage: `url(${thumb})` } : {}}>
-                    {hasOverride && <span className="admin-badge">Custom photo</span>}
-                  </div>
-                  <div className="admin-media-card-body">
-                    <strong title={p.name}>{p.name}</strong>
-                    <span className="admin-src-tag">{p.source}</span>
-                    <div className="admin-media-card-actions">
-                      <label className="admin-upload-btn">
-                        {hasOverride ? 'Add another' : 'Upload mockup'}
-                        <input type="file" accept="image/*" disabled={busy} onChange={e => e.target.files[0] && addOverrideImage(p, e.target.files[0])} />
-                      </label>
-                      {hasOverride && <button className="admin-link-btn" disabled={busy} onClick={() => clearOverride(p.id)}>Remove</button>}
+                <div key={p.id} className="admin-photo-row">
+                  <div className="admin-photo-row-head">
+                    <div className="admin-media-thumb sm" style={original ? { backgroundImage: `url(${original})` } : {}}>{!original && <span>—</span>}</div>
+                    <div>
+                      <strong title={p.name}>{p.name}</strong>
+                      <div className="admin-src-tag">{p.source} · {imgs.length} uploaded</div>
                     </div>
+                  </div>
+                  <div className="admin-photo-strip">
+                    {imgs.map((url, idx) => (
+                      <div key={url + idx} className="admin-photo-item" style={{ backgroundImage: `url(${url})` }}>
+                        {idx === 0 && <span className="admin-photo-lead">Leads</span>}
+                        <div className="admin-photo-ctrls">
+                          <button title="Move earlier" disabled={busy || idx === 0} onClick={() => moveOverrideImage(p, idx, -1)}>‹</button>
+                          <button title="Delete" className="del" disabled={busy} onClick={() => removeOverrideImage(p, idx)}>×</button>
+                          <button title="Move later" disabled={busy || idx === imgs.length - 1} onClick={() => moveOverrideImage(p, idx, 1)}>›</button>
+                        </div>
+                      </div>
+                    ))}
+                    <label className="admin-thumb-add lg">+
+                      <input type="file" accept="image/*" disabled={busy} onChange={e => e.target.files[0] && addOverrideImage(p, e.target.files[0])} />
+                    </label>
                   </div>
                 </div>
               );
