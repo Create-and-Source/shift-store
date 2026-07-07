@@ -430,6 +430,19 @@ function ProductCard({ product, index }) {
   );
 }
 
+// Serve a downscaled image for dense thumbnail grids/marquees. Supabase Storage
+// public objects go through the on-the-fly render/transform endpoint (~5-8× less
+// decoded GPU memory), which stops iOS Safari from evicting a heavy composited
+// row's layer and blanking it. Non-Supabase URLs pass through unchanged.
+function thumb(url, width) {
+  if (!url || typeof url !== 'string') return url;
+  if (url.includes('/storage/v1/object/public/')) {
+    const t = url.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
+    return t + (t.includes('?') ? '&' : '?') + `width=${width}&quality=70`;
+  }
+  return url;
+}
+
 function MarqueeRow({ items, reverse, speed }) {
   const trackRef = useRef(null);
   const navigate = useNavigate();
@@ -498,7 +511,7 @@ function MarqueeRow({ items, reverse, speed }) {
             onClick={() => { if (!s.moved) navigate(`/product/${p.id}`); }}
           >
             <div className="carousel-slide-img glitch-img-wrap">
-              <img src={p.image} alt={p.name} draggable="false" />
+              <img src={thumb(p.image, 500)} alt={p.name} draggable="false" decoding="async" />
               {p.badge && <div className="carousel-badge">{p.badge}</div>}
             </div>
             <div className="carousel-slide-info">
