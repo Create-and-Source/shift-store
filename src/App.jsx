@@ -698,30 +698,25 @@ function HomePage() {
         </div>
       </div>
 
-      {/* DARK SECTION — Racing */}
+      {/* DARK SECTION — OG Collection (centered) */}
       <section className="dark-section">
-        <div className="spread spread-reverse" style={{ minHeight: 'auto' }}>
-          <motion.div
-            className="spread-text"
-            style={{ background: 'var(--bg-raised)' }}
-            initial={{ opacity: 0, x: -40 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7 }}
-          >
-            <div className="spread-label">Our Staples</div>
-            <h2 className="spread-title"><GlitchText>The "OG" Collection</GlitchText></h2>
-            <p className="spread-body">
-              Vintage acid wash. Cool Graphics. Built for those who know that life keeps moving — and so should we.
-            </p>
-            <Link to="/shop" className="spread-link">
-              Shop Staples <ArrowRight size={14} />
-            </Link>
-          </motion.div>
-          <div className="spread-img glitch-img-wrap">
-            <video src="/videos/shift-og.mp4" autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          </div>
-        </div>
+        <motion.div
+          className="spread-text spread-centered"
+          style={{ background: 'var(--bg-raised)' }}
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.7 }}
+        >
+          <div className="spread-label">Our Staples</div>
+          <h2 className="spread-title"><GlitchText>The "OG" Collection</GlitchText></h2>
+          <p className="spread-body">
+            Vintage acid wash. Cool Graphics. Built for those who know that life keeps moving — and so should we.
+          </p>
+          <Link to="/shop" className="spread-link">
+            Shop Staples <ArrowRight size={14} />
+          </Link>
+        </motion.div>
       </section>
 
 

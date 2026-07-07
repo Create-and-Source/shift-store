@@ -476,6 +476,15 @@ img { max-width: 100%; display: block; }
   background: var(--bg);
 }
 
+/* Centered variant — no side image, content sits in the middle of the band */
+.spread-centered {
+  align-items: center;
+  text-align: center;
+  padding: 120px 40px;
+  min-height: auto;
+}
+.spread-centered .spread-body { max-width: 560px; }
+
 .spread-label {
   font-size: 11px;
   font-weight: 700;
