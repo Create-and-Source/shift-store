@@ -1077,13 +1077,41 @@ img { max-width: 100%; display: block; }
   align-items: start;
 }
 
-.pdp-gallery-img {
+.pdp-main {
+  background: var(--bg-card);
+  overflow: hidden;
+}
+.pdp-main-img {
+  display: block;
   width: 100%;
-  aspect-ratio: 4/5;
-  max-height: 82vh;
-  object-fit: cover;
+  height: auto;
   background: var(--bg-card);
 }
+.pdp-thumbs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.pdp-thumb {
+  width: 72px;
+  height: 88px;
+  padding: 0;
+  border: 1px solid var(--gray-dim);
+  background: var(--bg-card);
+  overflow: hidden;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity .2s, border-color .2s;
+}
+.pdp-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.pdp-thumb.active,
+.pdp-thumb:hover { opacity: 1; border-color: var(--red); }
 
 .pdp-info {
   position: sticky;
@@ -2621,6 +2649,12 @@ img { max-width: 100%; display: block; }
 }
 .shop-cat-tile:hover { transform: translateY(-2px); }
 .shop-cat-tile.active { border-color: var(--red, #e5322d); box-shadow: 0 0 0 1px var(--red, #e5322d); }
+@media (max-width: 640px) {
+  .shop-cat-tiles { grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+  /* Smaller tiles, and bias the crop to the upper body so faces/logos aren't cut off */
+  .shop-cat-tile { aspect-ratio: 16 / 10; background-position: center 20%; padding: 9px; }
+  .shop-cat-tile span { font-size: 12px; }
+}
 
 /* ═══ ADMIN MEDIA ═══ */
 .admin-media { padding: 20px 24px 60px; max-width: 1100px; margin: 0 auto; }
@@ -2740,7 +2774,8 @@ img { max-width: 100%; display: block; }
 }
 .pmar-row.left .pmar-track { animation: pmar-left 60s linear infinite; }
 .pmar-row.right .pmar-track { animation: pmar-right 72s linear infinite; }
-.pmar:hover .pmar-track { animation-play-state: paused; }
+/* Only the row the cursor lands on stops — the other keeps moving. */
+.pmar-row:hover .pmar-track { animation-play-state: paused; }
 @keyframes pmar-left {
   from { transform: translateX(0); }
   to { transform: translateX(-33.333%); }

@@ -779,6 +779,7 @@ function ProductPage() {
   const product = products.find(p => p.id === id);
   const [selectedColor, setSelectedColor] = useState(0);
   const [selectedSize, setSelectedSize] = useState(null);
+  const [activeImg, setActiveImg] = useState(0);
   const { addToCart } = useCart();
 
   if (loading) return <div style={{ padding: '200px 40px', textAlign: 'center', color: 'var(--gray)' }}><Loader size={24} className="spin" /></div>;
@@ -786,7 +787,9 @@ function ProductPage() {
 
   const currentColor = product.colors[selectedColor] || product.colors[0];
   const currentImages = currentColor?.images || [];
-  const mainImage = currentImages[0]?.url || product.image;
+  const galleryImages = currentImages.length ? currentImages.map(im => im.url) : [product.image].filter(Boolean);
+  const activeImage = galleryImages[Math.min(activeImg, galleryImages.length - 1)] || product.image;
+  const mainImage = activeImage;
   const selectedSizeObj = product.sizes.find(s => s.name === selectedSize);
   const totalPrice = product.price + (selectedSizeObj?.surcharge || 0);
 
@@ -800,14 +803,21 @@ function ProductPage() {
       <div className="scanlines" />
       <div className="pdp-layout">
         <div className="pdp-gallery">
-          {currentImages.map((img, i) => (
-            <div key={i} className="glitch-img-wrap">
-              <img className="pdp-gallery-img" src={img.url} alt={`${product.name} ${img.type}`} />
-            </div>
-          ))}
-          {currentImages.length === 0 && (
-            <div className="glitch-img-wrap">
-              <img className="pdp-gallery-img" src={product.image} alt={product.name} />
+          <div className="pdp-main glitch-img-wrap">
+            <img className="pdp-main-img" src={activeImage} alt={product.name} />
+          </div>
+          {galleryImages.length > 1 && (
+            <div className="pdp-thumbs">
+              {galleryImages.map((url, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={`pdp-thumb ${i === Math.min(activeImg, galleryImages.length - 1) ? 'active' : ''}`}
+                  onClick={() => setActiveImg(i)}
+                >
+                  <img src={url} alt={`${product.name} view ${i + 1}`} />
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -846,7 +856,7 @@ function ProductPage() {
                     key={c.name}
                     className={`color-swatch ${selectedColor === i ? 'active' : ''}`}
                     style={{ background: c.hex }}
-                    onClick={() => setSelectedColor(i)}
+                    onClick={() => { setSelectedColor(i); setActiveImg(0); }}
                   />
                 ))}
               </div>
