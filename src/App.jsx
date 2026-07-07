@@ -542,7 +542,7 @@ function HomePage() {
           transition={{ duration: 1, delay: 0.3 }}
         >
           <img src="/shift-logo.png" alt="Shift" className="hero-logo-img" />
-          <div className="hero-tagline">Life Keeps Moving</div>
+          <GlitchText tag="div" className="hero-tagline hero-tagline-cc">Life Keeps Moving</GlitchText>
           <Link to="/shop" className="hero-cta">
             Shop Now <ArrowRight size={14} />
           </Link>

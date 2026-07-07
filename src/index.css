@@ -331,6 +331,18 @@ img { max-width: 100%; display: block; }
   letter-spacing: 0.3em;
   text-transform: uppercase;
 }
+/* Glitchy + color-cycling tagline (keeps the .glitch RGB-split, adds a hue cycle) */
+.hero-tagline.hero-tagline-cc {
+  animation: glitch-skew 4s infinite ease-in-out alternate, tagline-cc 3s linear infinite;
+}
+@keyframes tagline-cc {
+  0%   { color: var(--red); }
+  20%  { color: #ff7a3c; }
+  40%  { color: #ffd23c; }
+  60%  { color: #fff; }
+  80%  { color: #0ff; }
+  100% { color: var(--red); }
+}
 
 .hero-cta {
   display: inline-flex;
@@ -1603,11 +1615,11 @@ img { max-width: 100%; display: block; }
   .header-inner { padding: 14px 16px; }
   .header-logo-img { height: 22px; }
 
-  /* HERO — center content, and a shorter frame so the landscape shot zooms out */
-  .hero { align-items: center; height: 60vh; min-height: 440px; }
-  .hero-media img, .hero-media video { object-position: center 30%; }
+  /* HERO — shorter frame (zooms the shot out) + content low so the SHIFT logo sits down */
+  .hero { align-items: flex-end; height: 64vh; min-height: 470px; }
+  .hero-media img, .hero-media video { object-position: center 28%; }
   .hero-inner {
-    padding: 0 24px;
+    padding: 0 24px 10vh;
     text-align: center;
     display: flex;
     flex-direction: column;
@@ -2653,10 +2665,10 @@ img { max-width: 100%; display: block; }
 .shop-cat-tile:hover { transform: translateY(-2px); }
 .shop-cat-tile.active { border-color: var(--red, #e5322d); box-shadow: 0 0 0 1px var(--red, #e5322d); }
 @media (max-width: 640px) {
-  /* Smaller tiles: three compact columns, portrait so the model shows and isn't cut off */
+  /* Way smaller: three small squares, crop biased to the face so models still read */
   .shop-cat-tiles { grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 14px; }
-  .shop-cat-tile { aspect-ratio: 3 / 4; background-position: center 15%; padding: 7px; }
-  .shop-cat-tile span { font-size: 10px; letter-spacing: .02em; }
+  .shop-cat-tile { aspect-ratio: 1 / 1; background-position: center 12%; padding: 6px; }
+  .shop-cat-tile span { font-size: 9px; letter-spacing: .02em; }
 }
 
 /* ═══ ADMIN MEDIA ═══ */
