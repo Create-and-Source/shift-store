@@ -1603,8 +1603,9 @@ img { max-width: 100%; display: block; }
   .header-inner { padding: 14px 16px; }
   .header-logo-img { height: 22px; }
 
-  /* HERO — center content, tighter fit */
-  .hero { align-items: center; }
+  /* HERO — center content, and a shorter frame so the landscape shot zooms out */
+  .hero { align-items: center; height: 60vh; min-height: 440px; }
+  .hero-media img, .hero-media video { object-position: center 30%; }
   .hero-inner {
     padding: 0 24px;
     text-align: center;
@@ -1676,10 +1677,11 @@ img { max-width: 100%; display: block; }
   .newsletter-form button { padding: 18px; }
 
   /* FOOTER */
-  .footer { padding: 44px 22px 28px; }
-  .footer-inner { grid-template-columns: repeat(3, 1fr); gap: 30px 12px; text-align: left; }
+  .footer { padding: 44px 18px 28px; }
+  .footer-inner { grid-template-columns: repeat(3, 1fr); gap: 28px 8px; text-align: center; }
   .footer-brand { grid-column: 1 / -1; text-align: center; margin-bottom: 4px; }
   .footer-desc { font-size: 12px; margin: 0 auto; max-width: 300px; }
+  .footer-col { display: flex; flex-direction: column; align-items: center; }
   .footer-col h4 { font-size: 10px; margin-bottom: 12px; }
   .footer-col a { font-size: 12px; margin-bottom: 9px; }
 
@@ -2609,12 +2611,13 @@ img { max-width: 100%; display: block; }
 /* ═══ SHOP BY CATEGORY (storefront) ═══ */
 .category-section { padding: 40px 6vw 24px; }
 .category-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 12px;
 }
 .category-tile {
-  position: relative; display: block; aspect-ratio: 3 / 4;
+  position: relative; display: block; aspect-ratio: 3 / 4; flex: 0 1 185px;
   overflow: hidden; border-radius: 2px; background: var(--bg-raised, #141414);
 }
 .category-tile img { width: 100%; height: 100%; object-fit: cover; transition: transform .6s ease; }
@@ -2638,9 +2641,9 @@ img { max-width: 100%; display: block; }
   gap: 10px; margin-top: 20px;
 }
 .shop-cat-tile {
-  position: relative; aspect-ratio: 16 / 9; padding: 12px; overflow: hidden; cursor: pointer;
+  position: relative; aspect-ratio: 4 / 3; padding: 12px; overflow: hidden; cursor: pointer;
   border: 1px solid rgba(255,255,255,.14); border-radius: 2px; background: var(--bg-raised, #141414);
-  background-size: cover; background-position: center;
+  background-size: cover; background-position: center 20%;
   display: flex; align-items: flex-end; transition: border-color .2s, transform .2s;
 }
 .shop-cat-tile span {
@@ -2650,10 +2653,10 @@ img { max-width: 100%; display: block; }
 .shop-cat-tile:hover { transform: translateY(-2px); }
 .shop-cat-tile.active { border-color: var(--red, #e5322d); box-shadow: 0 0 0 1px var(--red, #e5322d); }
 @media (max-width: 640px) {
-  .shop-cat-tiles { grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-  /* Smaller tiles, and bias the crop to the upper body so faces/logos aren't cut off */
-  .shop-cat-tile { aspect-ratio: 16 / 10; background-position: center 20%; padding: 9px; }
-  .shop-cat-tile span { font-size: 12px; }
+  /* Smaller tiles: three compact columns, portrait so the model shows and isn't cut off */
+  .shop-cat-tiles { grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 14px; }
+  .shop-cat-tile { aspect-ratio: 3 / 4; background-position: center 15%; padding: 7px; }
+  .shop-cat-tile span { font-size: 10px; letter-spacing: .02em; }
 }
 
 /* ═══ ADMIN MEDIA ═══ */
@@ -2753,48 +2756,37 @@ img { max-width: 100%; display: block; }
 .admin-photo-ctrls button.del { color: #ff7a7a; font-weight: 700; }
 .admin-thumb-add.lg { width: 84px; height: 84px; }
 
-/* ═══ PRODUCT MARQUEE — two rows moving independently ═══ */
+/* ═══ PRODUCT MARQUEE — two rows, auto-scroll + user can grab/swipe ═══ */
 .pmar {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   padding: 6px 0 10px;
-  overflow: hidden;
 }
 .pmar-row {
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  touch-action: pan-x;
+  cursor: grab;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
 }
+.pmar-row::-webkit-scrollbar { display: none; }
+.pmar-row:active { cursor: grabbing; }
 .pmar-track {
   display: flex;
   gap: 16px;
   width: max-content;
-  will-change: transform;
-}
-.pmar-row.left .pmar-track { animation: pmar-left 60s linear infinite; }
-.pmar-row.right .pmar-track { animation: pmar-right 72s linear infinite; }
-/* Only the row the cursor lands on stops — the other keeps moving. */
-.pmar-row:hover .pmar-track { animation-play-state: paused; }
-@keyframes pmar-left {
-  from { transform: translateX(0); }
-  to { transform: translateX(-33.333%); }
-}
-@keyframes pmar-right {
-  from { transform: translateX(-33.333%); }
-  to { transform: translateX(0); }
 }
 .pmar-card {
   flex: 0 0 clamp(190px, 22vw, 250px);
   cursor: pointer;
+  user-select: none;
 }
+.pmar-card img { pointer-events: none; }
 .pmar-card .carousel-slide-img { margin-bottom: 10px; }
-@media (prefers-reduced-motion: reduce) {
-  .pmar-row.left .pmar-track,
-  .pmar-row.right .pmar-track { animation: none; }
-  .pmar-row { overflow-x: auto; scrollbar-width: none; }
-  .pmar-row::-webkit-scrollbar { display: none; }
-}
 @media (max-width: 640px) {
-  .pmar-card { flex-basis: 52vw; }
+  .pmar-card { flex-basis: 42vw; }
 }

@@ -430,39 +430,81 @@ function ProductCard({ product, index }) {
   );
 }
 
-function ProductCarousel({ products: items }) {
+function MarqueeRow({ items, reverse, speed }) {
+  const ref = useRef(null);
   const navigate = useNavigate();
-  const mid = Math.ceil(items.length / 2);
-  const rows = [items.slice(0, mid), items.slice(mid)];
-  const dirs = ['left', 'right'];
+  const st = useRef({ paused: false, down: false, startX: 0, startScroll: 0, moved: false });
+  const loop = [...items, ...items];
+
+  // JS-driven auto-scroll on a real scroll container, so users can also
+  // grab/swipe each row back and forth. Auto-scroll pauses while interacting.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollLeft = reverse ? el.scrollWidth / 2 : 0;
+    let raf;
+    const tick = () => {
+      const s = st.current;
+      const half = el.scrollWidth / 2;
+      if (!s.paused && !s.down && !reduce && half > 0) {
+        el.scrollLeft += reverse ? -speed : speed;
+        if (el.scrollLeft >= half) el.scrollLeft -= half;
+        else if (el.scrollLeft <= 0) el.scrollLeft += half;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [items.length, reverse, speed]);
+
+  const s = st.current;
+  const onDown = (e) => { if (e.pointerType !== 'mouse') return; s.down = true; s.moved = false; s.startX = e.clientX; s.startScroll = ref.current.scrollLeft; };
+  const onMove = (e) => { if (e.pointerType !== 'mouse' || !s.down) return; const dx = e.clientX - s.startX; if (Math.abs(dx) > 4) s.moved = true; ref.current.scrollLeft = s.startScroll - dx; };
+  const onUp = () => { s.down = false; };
 
   return (
-    <div className="pmar">
-      {rows.map((row, ri) => (
-        row.length > 0 ? (
-          <div className={`pmar-row ${dirs[ri]}`} key={ri}>
-            {/* Row content tripled so the horizontal loop is seamless at any width. */}
-            <div className="pmar-track">
-              {[...row, ...row, ...row].map((p, i) => (
-                <div
-                  key={`${p.id}-${i}`}
-                  className="pmar-card"
-                  onClick={() => navigate(`/product/${p.id}`)}
-                >
-                  <div className="carousel-slide-img glitch-img-wrap">
-                    <img src={p.image} alt={p.name} />
-                    {p.badge && <div className="carousel-badge">{p.badge}</div>}
-                  </div>
-                  <div className="carousel-slide-info">
-                    <div className="carousel-slide-name">{p.name}</div>
-                    <div className="carousel-slide-price">${p.price}</div>
-                  </div>
-                </div>
-              ))}
+    <div
+      className="pmar-row"
+      ref={ref}
+      onMouseEnter={() => { s.paused = true; }}
+      onMouseLeave={() => { s.paused = false; s.down = false; }}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onTouchStart={() => { s.paused = true; }}
+      onTouchEnd={() => { s.paused = false; }}
+    >
+      <div className="pmar-track">
+        {loop.map((p, i) => (
+          <div
+            key={`${p.id}-${i}`}
+            className="pmar-card"
+            onClick={() => { if (!s.moved) navigate(`/product/${p.id}`); }}
+          >
+            <div className="carousel-slide-img glitch-img-wrap">
+              <img src={p.image} alt={p.name} draggable="false" />
+              {p.badge && <div className="carousel-badge">{p.badge}</div>}
+            </div>
+            <div className="carousel-slide-info">
+              <div className="carousel-slide-name">{p.name}</div>
+              <div className="carousel-slide-price">${p.price}</div>
             </div>
           </div>
-        ) : null
-      ))}
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProductCarousel({ products: items }) {
+  const mid = Math.ceil(items.length / 2);
+  const rowA = items.slice(0, mid);
+  const rowB = items.slice(mid);
+  return (
+    <div className="pmar">
+      {rowA.length > 0 && <MarqueeRow items={rowA} reverse={false} speed={0.4} />}
+      {rowB.length > 0 && <MarqueeRow items={rowB} reverse={true} speed={0.4} />}
     </div>
   );
 }
@@ -471,7 +513,7 @@ function ProductCarousel({ products: items }) {
 
 function HomePage() {
   const { products, customCategories } = useProducts();
-  const featured = products.slice(0, 12);
+  const featured = products.slice(0, 16);
   const categoryTiles = (customCategories || []).filter(c => c.image_url);
   const [heroLoaded, setHeroLoaded] = useState(false);
 
