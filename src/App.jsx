@@ -36,9 +36,11 @@ function ProductsProvider({ children }) {
         const next = { ...p };
         if (Array.isArray(ov.image_urls) && ov.image_urls.length) {
           const imgs = ov.image_urls.map(url => ({ url, zoom: url, thumbnail: url, type: 'custom' }));
-          next.image = imgs[0].url;
+          next.image = imgs[0].url; // uploaded mockup leads the card
+          // Keep the original photos — show uploaded mockups first, then the originals.
+          const origImages = p.colors?.[0]?.images || [];
           next.colors = (p.colors || []).length
-            ? [{ ...p.colors[0], images: imgs }, ...p.colors.slice(1)]
+            ? [{ ...p.colors[0], images: [...imgs, ...origImages] }, ...p.colors.slice(1)]
             : [{ name: 'Default', hex: '#0A0A0A', images: imgs }];
         }
         if (ov.name) next.name = ov.name;
@@ -1724,7 +1726,7 @@ function AdminMediaPage({ adminPassword }) {
       {/* ── Product Photos (overrides) ── */}
       {section === 'overrides' && (
         <div className="admin-media-body">
-          <p className="admin-media-hint">Replace the default feed photos with your own mockups. Uploaded photos show on the product card and page.</p>
+          <p className="admin-media-hint">Add your own mockups to a product. They show first, <strong>alongside</strong> the original photos — on the product card and page. “Remove” clears just the ones you added.</p>
           <input className="admin-media-search" placeholder="Search products…" value={ovSearch} onChange={e => setOvSearch(e.target.value)} />
           <div className="admin-media-grid">
             {filteredFeed.map(p => {
@@ -1744,7 +1746,7 @@ function AdminMediaPage({ adminPassword }) {
                         {hasOverride ? 'Add another' : 'Upload mockup'}
                         <input type="file" accept="image/*" disabled={busy} onChange={e => e.target.files[0] && addOverrideImage(p, e.target.files[0])} />
                       </label>
-                      {hasOverride && <button className="admin-link-btn" disabled={busy} onClick={() => clearOverride(p.id)}>Reset</button>}
+                      {hasOverride && <button className="admin-link-btn" disabled={busy} onClick={() => clearOverride(p.id)}>Remove</button>}
                     </div>
                   </div>
                 </div>
