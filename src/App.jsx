@@ -433,7 +433,7 @@ function ProductCard({ product, index }) {
 function MarqueeRow({ items, reverse, speed }) {
   const trackRef = useRef(null);
   const navigate = useNavigate();
-  const st = useRef({ pos: 0, half: 0, hover: false, dragging: false, moved: false, lastX: 0 });
+  const st = useRef({ pos: 0, hover: false, dragging: false, moved: false, lastX: 0 });
   const loop = [...items, ...items];
 
   // GPU-composited transform marquee off a float position — no native scroll,
@@ -446,27 +446,24 @@ function MarqueeRow({ items, reverse, speed }) {
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const dir = reverse ? -1 : 1;
 
-    // Half-width = one copy of the (2×-duplicated) list; re-measure as images load / on resize.
-    const measure = () => { s.half = track.scrollWidth / 2; };
-    measure();
-    track.querySelectorAll('img').forEach((img) => {
-      if (!img.complete) img.addEventListener('load', measure, { once: true });
-    });
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
-    ro && ro.observe(track);
-
     let raf;
     const tick = () => {
-      if (!s.hover && !s.dragging && !reduce && s.half > 0) s.pos += dir * speed;
-      if (s.half > 0) {
-        if (s.pos >= s.half) s.pos -= s.half;
-        else if (s.pos < 0) s.pos += s.half;
+      // Measure one copy of the (2×-duplicated) list live each frame. Reading
+      // scrollWidth after a transform-only write is cheap (transforms don't dirty
+      // layout) and keeps `half` correct as images load / the mobile breakpoint
+      // applies — no stale-measurement race that could strand a row off-screen.
+      const half = track.scrollWidth / 2;
+      if (half > 0) {
+        if (!s.hover && !s.dragging && !reduce) s.pos += dir * speed;
+        // Modulo wrap → pos is ALWAYS snapped into [0, half); an overshoot can't
+        // survive even one frame, so a row can never park itself blank.
+        s.pos = ((s.pos % half) + half) % half;
+        track.style.transform = `translate3d(${-s.pos}px,0,0)`;
       }
-      track.style.transform = `translate3d(${-s.pos}px,0,0)`;
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); ro && ro.disconnect(); };
+    return () => cancelAnimationFrame(raf);
   }, [items.length, reverse, speed]);
 
   const s = st.current;
