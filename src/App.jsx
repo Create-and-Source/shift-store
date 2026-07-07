@@ -1282,13 +1282,25 @@ function AdminProductsPage({ adminPassword }) {
   const loadData = async (selectId) => {
     setLoading(true);
     try {
-      const [prodRes, catRes] = await Promise.all([
+      const [prodRes, catRes, pfRes, shRes, contentRes] = await Promise.all([
         fetch('/api/products'),
         fetch('/api/admin/categories'),
+        fetch('/api/printify/products').catch(() => null),
+        fetch('/api/shopify/products').catch(() => null),
+        fetch('/api/admin/content').catch(() => null),
       ]);
       const prodData = await prodRes.json();
       const catData = await catRes.json();
-      setProducts(prodData.products || []);
+      const pfData = pfRes ? await pfRes.json().catch(() => ({ products: [] })) : { products: [] };
+      const shData = shRes ? await shRes.json().catch(() => ({ products: [] })) : { products: [] };
+      const contentData = contentRes ? await contentRes.json().catch(() => ({ customProducts: [] })) : { customProducts: [] };
+      // Show ALL sources in the back end (Fulfill Engine + Printify + Shopify + custom)
+      setProducts([
+        ...(prodData.products || []),
+        ...(pfData.products || []),
+        ...(shData.products || []),
+        ...(contentData.customProducts || []),
+      ]);
       setCategories(catData.categories || []);
       setAssignments(catData.assignments || []);
       setHiddenProductIds(catData.hiddenProductIds || []);
