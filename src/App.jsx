@@ -732,8 +732,30 @@ function ShopPage() {
     : [{ id: 'all', name: 'All' }, ...categories.map(c => ({ id: c.id || c.name, name: c.name }))];
   const usePhotoTiles = hasCustom && customCategories.some(c => c.image_url);
 
+  // Spread the "All" grid so same-category items aren't clustered together
+  // (e.g. not 3 hats in a row). Deterministic round-robin: deal one product
+  // from each category in rotation, preserving each category's internal order.
+  const spreadProducts = (list) => {
+    const groups = new Map();
+    for (const p of list) {
+      const key = (p.customCategories && p.customCategories[0]) || p.category || p.source || 'other';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(p);
+    }
+    const buckets = [...groups.values()];
+    const out = [];
+    for (let round = 0; out.length < list.length; round++) {
+      let progressed = false;
+      for (const b of buckets) {
+        if (round < b.length) { out.push(b[round]); progressed = true; }
+      }
+      if (!progressed) break;
+    }
+    return out;
+  };
+
   const filtered = activeFilter === 'all'
-    ? products
+    ? spreadProducts(products)
     : hasCustom
       ? products.filter(p => (p.customCategories || []).includes(activeFilter))
       : products.filter(p => p.category === activeFilter);
