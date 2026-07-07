@@ -1932,6 +1932,8 @@ function AdminOrdersPage({ adminPassword }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -1944,6 +1946,23 @@ function AdminOrdersPage({ adminPassword }) {
   };
 
   useEffect(() => { fetchOrders(); }, [filter]);
+
+  // Pull the latest tracking from Printify + Shopify onto in-flight orders.
+  const syncTracking = async () => {
+    setSyncing(true); setSyncMsg('');
+    try {
+      const res = await fetch('/api/sync-tracking', { headers: { 'x-admin-key': adminPassword } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      setSyncMsg(data.updated > 0
+        ? `Updated tracking on ${data.updated} order${data.updated === 1 ? '' : 's'}.`
+        : 'No new tracking yet — checked ' + (data.scanned || 0) + '.');
+      await fetchOrders();
+    } catch (err) {
+      setSyncMsg(err.message);
+    }
+    setSyncing(false);
+  };
 
   const updateOrder = async (orderId, updates) => {
     await fetch('/api/admin/orders', {
@@ -1986,7 +2005,11 @@ function AdminOrdersPage({ adminPassword }) {
             {s === 'all' ? 'All Orders' : s.charAt(0).toUpperCase() + s.slice(1)}
           </button>
         ))}
+        <button className="filter-btn sync-btn" onClick={syncTracking} disabled={syncing} style={{ marginLeft: 'auto' }}>
+          {syncing ? <><Loader size={12} className="spin" /> Syncing…</> : <><Truck size={12} /> Sync tracking</>}
+        </button>
       </div>
+      {syncMsg && <div style={{ padding: '0 24px 8px', fontSize: 12, color: 'var(--gray)' }}>{syncMsg}</div>}
 
       <div className="admin-content">
         <div className="admin-orders-list">

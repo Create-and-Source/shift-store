@@ -221,6 +221,20 @@ export async function sendPrintifyToProduction(orderId) {
   return pf(`/shops/${shopId}/orders/${orderId}/send_to_production.json`, { method: 'POST' })
 }
 
+// Fetch a single Printify order (includes `status` and `shipments`, each of
+// which carries { carrier, number, url, delivered_at } once it ships).
+export async function getPrintifyOrder(orderId) {
+  const shopId = await getShopId()
+  return pf(`/shops/${shopId}/orders/${orderId}.json`)
+}
+
+// Pull the first available tracking off a Printify order, or null if none yet.
+export function printifyTrackingFrom(order) {
+  const ship = (order?.shipments || []).find(s => s?.number)
+  if (!ship) return null
+  return { number: ship.number, url: ship.url || '', carrier: ship.carrier || '' }
+}
+
 // ─── Shipping rates ─────────────────────────────────────────────────────
 
 // The store ships US-only, and Printify's US "standard" rate is provider-set

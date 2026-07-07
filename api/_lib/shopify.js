@@ -277,3 +277,29 @@ export async function createShopifyOrder({ email, lineItems, shippingAddress }) 
   }
   return data?.orderCreate?.order
 }
+
+// ─── Admin API — tracking lookup ────────────────────────────────────────
+
+const ORDER_TRACKING = `
+query OrderTracking($id: ID!) {
+  order(id: $id) {
+    id
+    displayFulfillmentStatus
+    fulfillments(first: 10) {
+      trackingInfo { number url company }
+    }
+  }
+}`
+
+// Look up the first tracking number on a Shopify order's fulfillments, or null
+// if it hasn't shipped yet. `orderGid` is the gid stored when we created the
+// order (e.g. gid://shopify/Order/1234567890).
+export async function getShopifyOrderTracking(orderGid) {
+  const data = await adminGql(ORDER_TRACKING, { id: orderGid })
+  const fulfillments = data?.order?.fulfillments || []
+  for (const f of fulfillments) {
+    const t = (f.trackingInfo || [])[0]
+    if (t?.number) return { number: t.number, url: t.url || '', company: t.company || '' }
+  }
+  return null
+}
