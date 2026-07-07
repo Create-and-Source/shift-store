@@ -142,8 +142,15 @@ export function mapShopifyProduct(p) {
   const prices = variantInfo.map(v => v.price).filter(n => n > 0)
   const basePrice = prices.length ? Math.min(...prices) : parseFloat(p.priceRange?.minVariantPrice?.amount || '0')
 
+  // Full product gallery (every mockup/angle uploaded to the product).
   const productImages = (p.images?.edges || []).map(e => e.node.url)
   const defaultImg = p.featuredImage?.url || productImages[0] || ''
+
+  // Images pinned to a specific variant (usually the front shot of each
+  // colorway). Everything else in the gallery is a shared mockup — back,
+  // detail, lifestyle — that belongs to every color, not just one.
+  const variantImageUrls = new Set(variantInfo.map(v => v.image).filter(Boolean))
+  const sharedImages = productImages.filter(url => !variantImageUrls.has(url))
 
   const colorsMap = new Map()
   const sizesMap = new Map()
@@ -166,11 +173,14 @@ export function mapShopifyProduct(p) {
   }
 
   const colors = [...colorsMap.values()]
+  // Give every color the FULL set of mockups: its own variant shot(s) first,
+  // then the shared gallery images. A color with no variant image at all gets
+  // the whole gallery. This is why extra mockups now pull in instead of being
+  // dropped after the single variant image.
   colors.forEach(c => {
-    if (c.images.length === 0) {
-      const imgs = productImages.length ? productImages : (defaultImg ? [defaultImg] : [])
-      c.images = imgs.map(url => ({ url, zoom: url, thumbnail: url, type: 'shopify' }))
-    }
+    const have = new Set(c.images.map(im => im.url))
+    const extras = (c.images.length ? sharedImages : productImages).filter(url => !have.has(url))
+    c.images.push(...extras.map(url => ({ url, zoom: url, thumbnail: url, type: 'shopify' })))
   })
 
   return {
