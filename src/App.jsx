@@ -364,7 +364,7 @@ function Footer() {
   return (
     <footer className="footer">
       <div className="footer-inner">
-        <div>
+        <div className="footer-brand">
           <img src="/shift-logo.png" alt="Shift" className="footer-logo-img" />
           <p className="footer-desc">
             Your Mindset. Your Focus. Your Perspective. Life keeps moving — and so do we.
@@ -431,81 +431,38 @@ function ProductCard({ product, index }) {
 }
 
 function ProductCarousel({ products: items }) {
-  const trackRef = useRef(null);
-  const [page, setPage] = useState(0);
-  const [pages, setPages] = useState(1);
   const navigate = useNavigate();
-
-  // Recompute how many horizontal "pages" the two-row track spans.
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    const update = () => setPages(Math.max(1, Math.ceil((track.scrollWidth - 4) / track.clientWidth)));
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, [items.length]);
-
-  const scroll = (dir) => {
-    const track = trackRef.current;
-    if (!track) return;
-    const next = Math.max(0, Math.min(page + dir, pages - 1));
-    track.scrollTo({ left: track.clientWidth * next, behavior: 'smooth' });
-    setPage(next);
-  };
-
-  const onScroll = () => {
-    const track = trackRef.current;
-    if (!track) return;
-    setPage(Math.round(track.scrollLeft / track.clientWidth));
-  };
+  const mid = Math.ceil(items.length / 2);
+  const rows = [items.slice(0, mid), items.slice(mid)];
+  const dirs = ['left', 'right'];
 
   return (
-    <div className="carousel">
-      <div className="carousel-viewfinder">
-        <div className="vf-corner vf-tl" />
-        <div className="vf-corner vf-tr" />
-        <div className="vf-corner vf-bl" />
-        <div className="vf-corner vf-br" />
-        <div className="carousel-counter">
-          <span className="carousel-counter-current">{String(page + 1).padStart(2, '0')}</span>
-          <span className="carousel-counter-sep">/</span>
-          <span className="carousel-counter-total">{String(pages).padStart(2, '0')}</span>
-        </div>
-      </div>
-
-      <div className="carousel-track two-row" ref={trackRef} onScroll={onScroll}>
-        {items.map((p) => (
-          <div
-            key={p.id}
-            className="carousel-slide"
-            onClick={() => navigate(`/product/${p.id}`)}
-          >
-            <div className="carousel-slide-img glitch-img-wrap">
-              <img src={p.image} alt={p.name} loading="lazy" />
-              {p.badge && <div className="carousel-badge">{p.badge}</div>}
-            </div>
-            <div className="carousel-slide-info">
-              <div className="carousel-slide-name">{p.name}</div>
-              <div className="carousel-slide-price">${p.price}</div>
+    <div className="pmar">
+      {rows.map((row, ri) => (
+        row.length > 0 ? (
+          <div className={`pmar-row ${dirs[ri]}`} key={ri}>
+            {/* Row content tripled so the horizontal loop is seamless at any width. */}
+            <div className="pmar-track">
+              {[...row, ...row, ...row].map((p, i) => (
+                <div
+                  key={`${p.id}-${i}`}
+                  className="pmar-card"
+                  onClick={() => navigate(`/product/${p.id}`)}
+                >
+                  <div className="carousel-slide-img glitch-img-wrap">
+                    <img src={p.image} alt={p.name} />
+                    {p.badge && <div className="carousel-badge">{p.badge}</div>}
+                  </div>
+                  <div className="carousel-slide-info">
+                    <div className="carousel-slide-name">{p.name}</div>
+                    <div className="carousel-slide-price">${p.price}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
-
-      <div className="carousel-nav">
-        <button className="carousel-btn" onClick={() => scroll(-1)} disabled={page === 0}>
-          <ArrowLeft size={18} />
-        </button>
-        <div className="carousel-dots">
-          {Array.from({ length: pages }).map((_, i) => (
-            <div key={i} className={`carousel-dot ${i === page ? 'active' : ''}`} onClick={() => scroll(i - page)} />
-          ))}
-        </div>
-        <button className="carousel-btn" onClick={() => scroll(1)} disabled={page >= pages - 1}>
-          <ArrowRight size={18} />
-        </button>
-      </div>
+        ) : null
+      ))}
     </div>
   );
 }
@@ -867,7 +824,18 @@ function ProductPage() {
 
           <h1 className="pdp-name">{product.name}</h1>
           <div className="pdp-price">${totalPrice.toFixed(2)}</div>
-          <p className="pdp-desc">{product.description}</p>
+          {(() => {
+            const parts = (product.description || '').split(/\s*[-•]\s+/).map(s => s.trim()).filter(Boolean);
+            if (parts.length <= 1) return <p className="pdp-desc">{product.description}</p>;
+            return (
+              <div className="pdp-desc">
+                <p>{parts[0]}</p>
+                <ul className="pdp-features">
+                  {parts.slice(1).map((f, i) => <li key={i}>{f}</li>)}
+                </ul>
+              </div>
+            );
+          })()}
 
           {product.colors.length > 1 && (
             <>
