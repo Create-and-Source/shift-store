@@ -2780,29 +2780,30 @@ img { max-width: 100%; display: block; }
   padding: 6px 0 10px;
 }
 .pmar-row {
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  touch-action: pan-x;
+  overflow: hidden;
+  touch-action: pan-y;        /* we drive horizontal; browser keeps vertical page scroll */
   cursor: grab;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
 }
-.pmar-row::-webkit-scrollbar { display: none; }
 .pmar-row:active { cursor: grabbing; }
 .pmar-track {
   display: flex;
   gap: 16px;
   width: max-content;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);   /* promote to its own layer for smooth compositing */
 }
 .pmar-card {
   flex: 0 0 clamp(190px, 22vw, 250px);
   cursor: pointer;
   user-select: none;
 }
-.pmar-card img { pointer-events: none; }
+.pmar-card img { pointer-events: none; -webkit-user-drag: none; }
 .pmar-card .carousel-slide-img { margin-bottom: 10px; }
 @media (max-width: 640px) {
   .pmar-card { flex-basis: 42vw; }
+  /* Drop the edge-fade mask on mobile — masking a per-frame-animated strip
+     forces main-thread raster on iOS Safari and stutters the marquee. */
+  .pmar-row { -webkit-mask-image: none; mask-image: none; }
 }
