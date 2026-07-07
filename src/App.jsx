@@ -19,15 +19,14 @@ function ProductsProvider({ children }) {
       fetch('/api/admin/categories').then(r => r.json()).catch(() => ({})),
       fetch('/api/printify/products').then(r => r.json()).catch(() => ({ products: [] })),
       fetch('/api/shopify/products').then(r => r.json()).catch(() => ({ products: [] })),
-      fetch('/api/admin/content').then(r => r.json()).catch(() => ({ overrides: {}, customProducts: [] })),
+      fetch('/api/admin/content').then(r => r.json()).catch(() => ({ overrides: {} })),
     ]).then(([prodData, catData, pfData, shData, contentData]) => {
       const hidden = new Set(catData.hiddenProductIds || []);
       const overrides = contentData.overrides || {};
       const feProducts = (prodData.products || []).map(p => ({ ...p, source: p.source || 'fulfillengine' }));
       const pfProducts = (pfData.products || []);
       const shProducts = (shData.products || []);
-      const customProducts = (contentData.customProducts || []);
-      let allProducts = [...feProducts, ...pfProducts, ...shProducts, ...customProducts].filter(p => !hidden.has(p.id));
+      let allProducts = [...feProducts, ...pfProducts, ...shProducts].filter(p => !hidden.has(p.id));
 
       // Apply admin overrides — swap in uploaded mockups / name / price.
       allProducts = allProducts.map(p => {
@@ -1378,24 +1377,21 @@ function AdminProductsPage({ adminPassword }) {
   const loadData = async (selectId) => {
     setLoading(true);
     try {
-      const [prodRes, catRes, pfRes, shRes, contentRes] = await Promise.all([
+      const [prodRes, catRes, pfRes, shRes] = await Promise.all([
         fetch('/api/products'),
         fetch('/api/admin/categories'),
         fetch('/api/printify/products').catch(() => null),
         fetch('/api/shopify/products').catch(() => null),
-        fetch('/api/admin/content').catch(() => null),
       ]);
       const prodData = await prodRes.json();
       const catData = await catRes.json();
       const pfData = pfRes ? await pfRes.json().catch(() => ({ products: [] })) : { products: [] };
       const shData = shRes ? await shRes.json().catch(() => ({ products: [] })) : { products: [] };
-      const contentData = contentRes ? await contentRes.json().catch(() => ({ customProducts: [] })) : { customProducts: [] };
-      // Show ALL sources in the back end (Fulfill Engine + Printify + Shopify + custom)
+      // Show ALL sources in the back end (Fulfill Engine + Printify + Shopify)
       setProducts([
         ...(prodData.products || []),
         ...(pfData.products || []),
         ...(shData.products || []),
-        ...(contentData.customProducts || []),
       ]);
       setCategories(catData.categories || []);
       setAssignments(catData.assignments || []);
@@ -1625,15 +1621,13 @@ async function uploadImageFile(file, { folder, name, adminPassword }) {
 }
 
 function AdminMediaPage({ adminPassword }) {
-  const [section, setSection] = useState('categories'); // categories | custom | overrides
+  const [section, setSection] = useState('categories'); // categories | overrides
   const [categories, setCategories] = useState([]);
-  const [customProducts, setCustomProducts] = useState([]);
   const [feedProducts, setFeedProducts] = useState([]);
   const [overrides, setOverrides] = useState({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
-  const [draft, setDraft] = useState({ name: '', price: '', description: '', sizes: '', image_urls: [] });
   const [ovSearch, setOvSearch] = useState('');
 
   const load = async () => {
@@ -1653,7 +1647,6 @@ function AdminMediaPage({ adminPassword }) {
       const shData = shRes ? await shRes.json().catch(() => ({ products: [] })) : { products: [] };
       setCategories(catData.categories || []);
       setOverrides(content.overrides || {});
-      setCustomProducts(content.customProducts || []);
       setFeedProducts([...(prodData.products || []), ...(pfData.products || []), ...(shData.products || [])]);
     } catch (e) { setStatusMsg(e.message); }
     setLoading(false);
@@ -1689,35 +1682,6 @@ function AdminMediaPage({ adminPassword }) {
     await post('/api/admin/categories', { action: 'setCategoryImage', categoryId: catId, imageUrl: null });
     await load();
   });
-
-  // ── Custom products ──
-  const addDraftImage = (file) => withBusy('Uploading image…', async () => {
-    const url = await uploadImageFile(file, { folder: 'products', name: draft.name || 'product', adminPassword });
-    setDraft(d => ({ ...d, image_urls: [...d.image_urls, url] }));
-    setStatusMsg('Image added ✓');
-  });
-  const createCustom = (e) => {
-    e.preventDefault();
-    if (!draft.name.trim()) { setStatusMsg('Name required'); return; }
-    withBusy('Creating…', async () => {
-      await post('/api/admin/content', {
-        action: 'createCustomProduct',
-        name: draft.name, description: draft.description, price: draft.price,
-        imageUrls: draft.image_urls,
-        sizes: draft.sizes.split(',').map(s => s.trim()).filter(Boolean),
-      });
-      setDraft({ name: '', price: '', description: '', sizes: '', image_urls: [] });
-      setStatusMsg('Product created ✓');
-      await load();
-    });
-  };
-  const deleteCustom = (id) => {
-    if (!confirm('Delete this product?')) return;
-    withBusy('Deleting…', async () => {
-      await post('/api/admin/content', { action: 'deleteCustomProduct', id });
-      await load();
-    });
-  };
 
   // ── Overrides on feed products ──
   const addOverrideImage = (product, file) => withBusy('Uploading mockup…', async () => {
@@ -1772,7 +1736,6 @@ function AdminMediaPage({ adminPassword }) {
     <div className="admin-media">
       <div className="admin-media-tabs">
         <button className={section === 'categories' ? 'active' : ''} onClick={() => setSection('categories')}>Category Photos</button>
-        <button className={section === 'custom' ? 'active' : ''} onClick={() => setSection('custom')}>Custom Products</button>
         <button className={section === 'overrides' ? 'active' : ''} onClick={() => setSection('overrides')}>Product Photos</button>
       </div>
       {statusMsg && <div className="admin-media-status">{busy && <Loader size={12} className="spin" />} {statusMsg}</div>}
@@ -1798,44 +1761,6 @@ function AdminMediaPage({ adminPassword }) {
                     {cat.image_url && <button className="admin-link-btn" disabled={busy} onClick={() => clearCategoryPhoto(cat.id)}>Remove</button>}
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Custom Products ── */}
-      {section === 'custom' && (
-        <div className="admin-media-body admin-media-2col">
-          <form className="admin-product-form" onSubmit={createCustom}>
-            <h3>New Product</h3>
-            <label>Name<input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} placeholder="e.g. SHIFT Signature Tee" /></label>
-            <label>Price (USD)<input type="number" step="0.01" value={draft.price} onChange={e => setDraft(d => ({ ...d, price: e.target.value }))} placeholder="45.00" /></label>
-            <label>Sizes (comma-separated)<input value={draft.sizes} onChange={e => setDraft(d => ({ ...d, sizes: e.target.value }))} placeholder="S, M, L, XL" /></label>
-            <label>Description<textarea rows={3} value={draft.description} onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} placeholder="Short product description" /></label>
-            <div className="admin-thumb-row">
-              {draft.image_urls.map((url, i) => (
-                <div key={i} className="admin-thumb-mini" style={{ backgroundImage: `url(${url})` }}>
-                  <button type="button" onClick={() => setDraft(d => ({ ...d, image_urls: d.image_urls.filter((_, j) => j !== i) }))}>×</button>
-                </div>
-              ))}
-              <label className="admin-thumb-add">+
-                <input type="file" accept="image/*" disabled={busy} onChange={e => e.target.files[0] && addDraftImage(e.target.files[0])} />
-              </label>
-            </div>
-            <button type="submit" disabled={busy} className="admin-primary-btn">Create Product</button>
-          </form>
-          <div className="admin-custom-list">
-            <h3>Your Custom Products ({customProducts.length})</h3>
-            {customProducts.length === 0 && <p className="admin-media-empty">None yet — create one on the left.</p>}
-            {customProducts.map(cp => (
-              <div key={cp.id} className="admin-custom-row">
-                <div className="admin-media-thumb sm" style={cp.image ? { backgroundImage: `url(${cp.image})` } : {}}>{!cp.image && <span>—</span>}</div>
-                <div className="admin-custom-info">
-                  <strong>{cp.name}</strong>
-                  <span>${cp.price.toFixed(2)} · {cp.sizes.length} sizes · {cp.colors[0]?.images.length || 0} photos</span>
-                </div>
-                <button className="admin-link-btn danger" disabled={busy} onClick={() => deleteCustom(cp.customProductId)}>Delete</button>
               </div>
             ))}
           </div>
