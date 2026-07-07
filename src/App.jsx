@@ -889,14 +889,33 @@ function ProductPage() {
 }
 
 function CollectionsPage() {
-  const boards = [
-    { img: '/lifestyle/pizza-shop.png', label: 'Core', title: 'Essentials', rot: -3 },
-    { img: '/lifestyle/car-meet.png', label: 'Limited', title: 'Racing', rot: 2.5 },
-    { img: '/lifestyle/convertible-pink-red.png', label: 'New', title: 'Fresh Drops', rot: -1.5 },
-    { img: '/lifestyle/subway.png', label: 'Vintage', title: 'City Series', rot: 4 },
-    { img: '/lifestyle/chinatown.jpg', label: 'Street', title: 'Chinatown', rot: -2 },
-    { img: '/lifestyle/nyc-crosswalk.png', label: 'Lifestyle', title: 'NYC', rot: 3 },
+  const { products, customCategories } = useProducts();
+  const rots = [-3, 2.5, -1.5, 4, -2, 3, -2.5, 1.5, -3.5, 2];
+
+  // Build the board from the store's real categories (managed in the admin).
+  const catBoards = (customCategories || []).map((c, i) => {
+    const inCat = products.filter(p => (p.customCategories || []).includes(c.name));
+    const img = c.image_url || inCat[0]?.image || inCat[0]?.colors?.[0]?.images?.[0]?.url || '';
+    return {
+      title: c.name,
+      img,
+      label: `${inCat.length} ${inCat.length === 1 ? 'piece' : 'pieces'}`,
+      to: `/shop?category=${encodeURIComponent(c.name)}`,
+      rot: rots[i % rots.length],
+    };
+  });
+
+  // Fallback editorial boards only if no categories exist yet.
+  const fallbackBoards = [
+    { img: '/lifestyle/pizza-shop.png', label: 'Core', title: 'Essentials', to: '/shop', rot: -3 },
+    { img: '/lifestyle/car-meet.png', label: 'Limited', title: 'Racing', to: '/shop', rot: 2.5 },
+    { img: '/lifestyle/convertible-pink-red.png', label: 'New', title: 'Fresh Drops', to: '/shop', rot: -1.5 },
+    { img: '/lifestyle/subway.png', label: 'Vintage', title: 'City Series', to: '/shop', rot: 4 },
+    { img: '/lifestyle/chinatown.jpg', label: 'Street', title: 'Chinatown', to: '/shop', rot: -2 },
+    { img: '/lifestyle/nyc-crosswalk.png', label: 'Lifestyle', title: 'NYC', to: '/shop', rot: 3 },
   ];
+
+  const boards = catBoards.length > 0 ? catBoards : fallbackBoards;
 
   return (
     <>
@@ -904,7 +923,7 @@ function CollectionsPage() {
       <div className="shop-header">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
           <h1 className="shop-title"><GlitchText>Collections</GlitchText></h1>
-          <p style={{ fontSize: 15, color: 'var(--gray)', marginTop: 12 }}>Curated drops. Each one tells a story.</p>
+          <p style={{ fontSize: 15, color: 'var(--gray)', marginTop: 12 }}>Shop by category. Each one tells a story.</p>
         </motion.div>
       </div>
 
@@ -912,8 +931,8 @@ function CollectionsPage() {
         <div className="board-inner">
           {boards.map((b, i) => (
             <Link
-              to="/shop"
-              key={i}
+              to={b.to}
+              key={b.title + i}
               className="pin-card"
               style={{
                 '--rot': `${b.rot}deg`,
@@ -923,7 +942,9 @@ function CollectionsPage() {
               <div className="pin" />
               <div className="pin-shadow" />
               <div className="pin-photo">
-                <img src={b.img} alt={b.title} loading="lazy" />
+                {b.img
+                  ? <img src={b.img} alt={b.title} loading="lazy" />
+                  : <div className="pin-photo-empty"><span>{b.title}</span></div>}
               </div>
               <div className="pin-label">
                 <span className="pin-label-tag">{b.label}</span>

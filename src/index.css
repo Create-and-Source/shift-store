@@ -1374,6 +1374,28 @@ img { max-width: 100%; display: block; }
   filter: saturate(1) contrast(1.05);
 }
 
+/* Placeholder when a category has no photo uploaded yet */
+.pin-photo-empty {
+  width: 100%;
+  aspect-ratio: 4/5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px;
+  background:
+    radial-gradient(120% 120% at 30% 20%, rgba(229,0,0,0.18), transparent 60%),
+    linear-gradient(135deg, #1a1a1a, #0a0a0a);
+}
+.pin-photo-empty span {
+  font-family: 'Archivo', sans-serif;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  color: rgba(255,255,255,0.9);
+  text-transform: uppercase;
+}
+
 .pin-card:hover .pin-photo {
   box-shadow:
     0 8px 30px rgba(229,0,0,0.15),
