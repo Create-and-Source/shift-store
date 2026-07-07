@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader, Package, Truck, Eye, LogOut, Lock, Mail, Clock, Search } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
-/* ═══ PRODUCTS CONTEXT — merges Fulfill Engine + Printify ═══ */
+/* ═══ PRODUCTS CONTEXT — merges Fulfill Engine + Printify + Shopify ═══ */
 const ProductsContext = createContext();
 
 function ProductsProvider({ children }) {
@@ -18,11 +18,13 @@ function ProductsProvider({ children }) {
       fetch('/api/products').then(r => r.json()).catch(() => ({ products: [] })),
       fetch('/api/admin/categories').then(r => r.json()).catch(() => ({})),
       fetch('/api/printify/products').then(r => r.json()).catch(() => ({ products: [] })),
-    ]).then(([prodData, catData, pfData]) => {
+      fetch('/api/shopify/products').then(r => r.json()).catch(() => ({ products: [] })),
+    ]).then(([prodData, catData, pfData, shData]) => {
       const hidden = new Set(catData.hiddenProductIds || []);
       const feProducts = (prodData.products || []).map(p => ({ ...p, source: p.source || 'fulfillengine' }));
       const pfProducts = (pfData.products || []);
-      const allProducts = [...feProducts, ...pfProducts].filter(p => !hidden.has(p.id));
+      const shProducts = (shData.products || []);
+      const allProducts = [...feProducts, ...pfProducts, ...shProducts].filter(p => !hidden.has(p.id));
 
       // Attach custom categories to each product
       const assignMap = new Map();
