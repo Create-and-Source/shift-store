@@ -690,7 +690,7 @@ function HomePage() {
             </Link>
           </motion.div>
           <div className="spread-img glitch-img-wrap">
-            <video src="/videos/shift-racing.mp4" autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <video src="/videos/shift-og.mp4" autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
         </div>
       </section>
