@@ -1326,6 +1326,9 @@ function AdminProductsPage({ adminPassword }) {
   const [categories, setCategories] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [hiddenProductIds, setHiddenProductIds] = useState([]);
+  const [overrides, setOverrides] = useState({});      // productId -> { image_urls, name, price }
+  const [priceDrafts, setPriceDrafts] = useState({});  // productId -> string (her sell price)
+  const [savingId, setSavingId] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categoryNameDraft, setCategoryNameDraft] = useState('');
@@ -1372,16 +1375,18 @@ function AdminProductsPage({ adminPassword }) {
   const loadData = async (selectId) => {
     setLoading(true);
     try {
-      const [prodRes, catRes, pfRes, shRes] = await Promise.all([
+      const [prodRes, catRes, pfRes, shRes, contentRes] = await Promise.all([
         fetch('/api/products'),
         fetch('/api/admin/categories'),
         fetch('/api/printify/products').catch(() => null),
         fetch('/api/shopify/products').catch(() => null),
+        fetch('/api/admin/content').catch(() => null),
       ]);
       const prodData = await prodRes.json();
       const catData = await catRes.json();
       const pfData = pfRes ? await pfRes.json().catch(() => ({ products: [] })) : { products: [] };
       const shData = shRes ? await shRes.json().catch(() => ({ products: [] })) : { products: [] };
+      const contentData = contentRes ? await contentRes.json().catch(() => ({ overrides: {} })) : { overrides: {} };
       // Show ALL sources in the back end (Fulfill Engine + Printify + Shopify)
       setProducts([
         ...(prodData.products || []),
@@ -1391,6 +1396,14 @@ function AdminProductsPage({ adminPassword }) {
       setCategories(catData.categories || []);
       setAssignments(catData.assignments || []);
       setHiddenProductIds(catData.hiddenProductIds || []);
+      // Sell-price overrides — seed the editable price fields (blank = sells at cost).
+      const ov = contentData.overrides || {};
+      setOverrides(ov);
+      const drafts = {};
+      for (const [pid, o] of Object.entries(ov)) {
+        if (o.price != null) drafts[pid] = String(o.price);
+      }
+      setPriceDrafts(drafts);
       if (selectId) {
         setSelectedCategoryId(selectId);
         const cat = (catData.categories || []).find(c => c.id === selectId);
@@ -1413,6 +1426,51 @@ function AdminProductsPage({ adminPassword }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed');
     return data;
+  };
+
+  const contentFetch = async (action, body = {}) => {
+    const res = await fetch('/api/admin/content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+      body: JSON.stringify({ action, ...body }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+    return data;
+  };
+
+  // Save (or clear) the sell price for one product. Blank = revert to cost.
+  // Preserves any existing photo/name override on the same product.
+  const savePrice = async (product) => {
+    const raw = (priceDrafts[product.id] ?? '').trim();
+    const cur = overrides[product.id] || {};
+    const prev = cur.price != null ? String(cur.price) : '';
+    if (raw === prev) return; // unchanged — no write
+    let price = null;
+    if (raw !== '') {
+      price = Number(raw);
+      if (isNaN(price) || price < 0) { setStatusMsg('Enter a valid price'); return; }
+    }
+    setSavingId(product.id);
+    try {
+      const hasOtherOverride = (cur.image_urls?.length || 0) > 0 || !!cur.name;
+      if (price == null && !hasOtherOverride) {
+        await contentFetch('clearOverride', { productId: product.id });
+        setOverrides(o => { const n = { ...o }; delete n[product.id]; return n; });
+      } else {
+        await contentFetch('setOverride', {
+          productId: product.id,
+          imageUrls: cur.image_urls || [],
+          name: cur.name || null,
+          price,
+        });
+        setOverrides(o => ({ ...o, [product.id]: { image_urls: cur.image_urls || [], name: cur.name || null, price } }));
+      }
+      setStatusMsg(price == null ? `Reset to cost: ${product.name}` : `Price saved: ${product.name} → $${price.toFixed(2)}`);
+    } catch (err) {
+      setStatusMsg(err.message);
+    }
+    setSavingId(null);
   };
 
   const createCategory = async (e) => {
@@ -1560,7 +1618,24 @@ function AdminProductsPage({ adminPassword }) {
                     {productCats.length ? productCats.map(c => <small key={c}>{c}</small>) : <small className="tag-empty">Uncategorized</small>}
                   </div>
                 </div>
-                <strong>${product.price.toFixed(2)}</strong>
+                <div className="admin-price-cell">
+                  <small className="admin-price-cost">Cost ${product.price.toFixed(2)}</small>
+                  <label className="admin-price-input">
+                    <span>$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      inputMode="decimal"
+                      placeholder={product.price.toFixed(2)}
+                      value={priceDrafts[product.id] ?? ''}
+                      onChange={e => setPriceDrafts(d => ({ ...d, [product.id]: e.target.value }))}
+                      onBlur={() => savePrice(product)}
+                      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                    />
+                    {savingId === product.id && <Loader size={12} className="spin" />}
+                  </label>
+                </div>
                 <button className="admin-cat-hide-btn" onClick={() => toggleHidden(product.id, !isHidden)}>
                   {isHidden ? 'Show' : 'Hide'}
                 </button>
