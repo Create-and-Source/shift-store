@@ -574,7 +574,7 @@ function HomePage() {
       {/* SPREAD — Essentials */}
       <section className="spread">
         <div className="spread-img glitch-img-wrap">
-          <img src="/lifestyle/street-crossing.png" alt="Shift on the streets" loading="lazy" />
+          <img src="/lifestyle/creator.jpg" alt="Meet the creator — SHIFT" loading="lazy" style={{ objectPosition: 'center 30%' }} />
         </div>
         <motion.div
           className="spread-text"
