@@ -656,7 +656,7 @@ function HomePage() {
         <div className="photo-grid-item tall glitch-img-wrap">
           <img src="/lifestyle/shift-walk.jpg" alt="Shift — life keeps moving" loading="lazy" />
         </div>
-        <div className="photo-grid-item glitch-img-wrap">
+        <div className="photo-grid-item pg-wide glitch-img-wrap">
           <img src="/lifestyle/shift-convertible.jpg" alt="Shift NYC convertible" loading="lazy" />
         </div>
         <div className="photo-grid-item glitch-img-wrap">
