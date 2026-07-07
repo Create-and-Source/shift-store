@@ -432,28 +432,32 @@ function ProductCard({ product, index }) {
 
 function ProductCarousel({ products: items }) {
   const trackRef = useRef(null);
-  const [current, setCurrent] = useState(0);
+  const [page, setPage] = useState(0);
+  const [pages, setPages] = useState(1);
   const navigate = useNavigate();
+
+  // Recompute how many horizontal "pages" the two-row track spans.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const update = () => setPages(Math.max(1, Math.ceil((track.scrollWidth - 4) / track.clientWidth)));
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [items.length]);
 
   const scroll = (dir) => {
     const track = trackRef.current;
     if (!track) return;
-    const card = track.querySelector('.carousel-slide');
-    if (!card) return;
-    const w = card.offsetWidth + 16;
-    const next = Math.max(0, Math.min(current + dir, items.length - 1));
-    track.scrollTo({ left: w * next, behavior: 'smooth' });
-    setCurrent(next);
+    const next = Math.max(0, Math.min(page + dir, pages - 1));
+    track.scrollTo({ left: track.clientWidth * next, behavior: 'smooth' });
+    setPage(next);
   };
 
   const onScroll = () => {
     const track = trackRef.current;
     if (!track) return;
-    const card = track.querySelector('.carousel-slide');
-    if (!card) return;
-    const w = card.offsetWidth + 16;
-    const idx = Math.round(track.scrollLeft / w);
-    setCurrent(idx);
+    setPage(Math.round(track.scrollLeft / track.clientWidth));
   };
 
   return (
@@ -464,21 +468,21 @@ function ProductCarousel({ products: items }) {
         <div className="vf-corner vf-bl" />
         <div className="vf-corner vf-br" />
         <div className="carousel-counter">
-          <span className="carousel-counter-current">{String(current + 1).padStart(2, '0')}</span>
+          <span className="carousel-counter-current">{String(page + 1).padStart(2, '0')}</span>
           <span className="carousel-counter-sep">/</span>
-          <span className="carousel-counter-total">{String(items.length).padStart(2, '0')}</span>
+          <span className="carousel-counter-total">{String(pages).padStart(2, '0')}</span>
         </div>
       </div>
 
-      <div className="carousel-track" ref={trackRef} onScroll={onScroll}>
-        {items.map((p, i) => (
+      <div className="carousel-track two-row" ref={trackRef} onScroll={onScroll}>
+        {items.map((p) => (
           <div
             key={p.id}
-            className={`carousel-slide ${i === current ? 'active' : ''}`}
+            className="carousel-slide"
             onClick={() => navigate(`/product/${p.id}`)}
           >
             <div className="carousel-slide-img glitch-img-wrap">
-              <img src={p.image} alt={p.name} />
+              <img src={p.image} alt={p.name} loading="lazy" />
               {p.badge && <div className="carousel-badge">{p.badge}</div>}
             </div>
             <div className="carousel-slide-info">
@@ -490,15 +494,15 @@ function ProductCarousel({ products: items }) {
       </div>
 
       <div className="carousel-nav">
-        <button className="carousel-btn" onClick={() => scroll(-1)} disabled={current === 0}>
+        <button className="carousel-btn" onClick={() => scroll(-1)} disabled={page === 0}>
           <ArrowLeft size={18} />
         </button>
         <div className="carousel-dots">
-          {items.map((_, i) => (
-            <div key={i} className={`carousel-dot ${i === current ? 'active' : ''}`} />
+          {Array.from({ length: pages }).map((_, i) => (
+            <div key={i} className={`carousel-dot ${i === page ? 'active' : ''}`} onClick={() => scroll(i - page)} />
           ))}
         </div>
-        <button className="carousel-btn" onClick={() => scroll(1)} disabled={current === items.length - 1}>
+        <button className="carousel-btn" onClick={() => scroll(1)} disabled={page >= pages - 1}>
           <ArrowRight size={18} />
         </button>
       </div>
@@ -510,7 +514,7 @@ function ProductCarousel({ products: items }) {
 
 function HomePage() {
   const { products, customCategories } = useProducts();
-  const featured = products.slice(0, 6);
+  const featured = products.slice(0, 12);
   const categoryTiles = (customCategories || []).filter(c => c.image_url);
   const [heroLoaded, setHeroLoaded] = useState(false);
 

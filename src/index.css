@@ -674,10 +674,13 @@ img { max-width: 100%; display: block; }
 .carousel-counter-total { color: var(--gray); }
 
 .carousel-track {
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-columns: clamp(190px, 22vw, 250px);
+  gap: 14px 16px;
   overflow-x: auto;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
   padding: 0 40px 20px;
@@ -687,11 +690,10 @@ img { max-width: 100%; display: block; }
 .carousel-track::-webkit-scrollbar { display: none; }
 
 .carousel-slide {
-  flex: 0 0 calc(50% - 8px);
   scroll-snap-align: start;
   cursor: pointer;
   transition: all 0.4s ease;
-  opacity: 0.5;
+  opacity: 1;
 }
 
 .carousel-slide.active {
@@ -711,7 +713,7 @@ img { max-width: 100%; display: block; }
   aspect-ratio: 3/4;
   object-fit: cover;
   transition: transform 0.5s ease;
-  filter: saturate(0.7);
+  filter: saturate(0.9);
 }
 
 .carousel-slide.active .carousel-slide-img img {
@@ -1534,7 +1536,7 @@ img { max-width: 100%; display: block; }
 
   .board-inner { grid-template-columns: repeat(2, 1fr); gap: 40px 24px; padding: 40px 24px; }
 
-  .carousel-slide { flex: 0 0 calc(60% - 8px); }
+  .carousel-track { grid-auto-columns: clamp(180px, 30vw, 230px); }
 
   .marquee-item { font-size: clamp(36px, 6vw, 60px); }
 }
@@ -1597,8 +1599,7 @@ img { max-width: 100%; display: block; }
   .shop-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
 
   /* CAROUSEL */
-  .carousel-track { padding: 0 20px 16px; gap: 12px; }
-  .carousel-slide { flex: 0 0 calc(85% - 6px); }
+  .carousel-track { padding: 0 20px 16px; gap: 12px 12px; grid-auto-columns: 46vw; }
   .carousel-slide-name { font-size: 13px; }
   .carousel-slide-price { font-size: 12px; }
   .carousel-nav { padding: 16px 20px 0; gap: 14px; }
