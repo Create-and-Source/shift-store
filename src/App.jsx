@@ -19,12 +19,32 @@ function ProductsProvider({ children }) {
       fetch('/api/admin/categories').then(r => r.json()).catch(() => ({})),
       fetch('/api/printify/products').then(r => r.json()).catch(() => ({ products: [] })),
       fetch('/api/shopify/products').then(r => r.json()).catch(() => ({ products: [] })),
-    ]).then(([prodData, catData, pfData, shData]) => {
+      fetch('/api/admin/content').then(r => r.json()).catch(() => ({ overrides: {}, customProducts: [] })),
+    ]).then(([prodData, catData, pfData, shData, contentData]) => {
       const hidden = new Set(catData.hiddenProductIds || []);
+      const overrides = contentData.overrides || {};
       const feProducts = (prodData.products || []).map(p => ({ ...p, source: p.source || 'fulfillengine' }));
       const pfProducts = (pfData.products || []);
       const shProducts = (shData.products || []);
-      const allProducts = [...feProducts, ...pfProducts, ...shProducts].filter(p => !hidden.has(p.id));
+      const customProducts = (contentData.customProducts || []);
+      let allProducts = [...feProducts, ...pfProducts, ...shProducts, ...customProducts].filter(p => !hidden.has(p.id));
+
+      // Apply admin overrides — swap in uploaded mockups / name / price.
+      allProducts = allProducts.map(p => {
+        const ov = overrides[p.id];
+        if (!ov) return p;
+        const next = { ...p };
+        if (Array.isArray(ov.image_urls) && ov.image_urls.length) {
+          const imgs = ov.image_urls.map(url => ({ url, zoom: url, thumbnail: url, type: 'custom' }));
+          next.image = imgs[0].url;
+          next.colors = (p.colors || []).length
+            ? [{ ...p.colors[0], images: imgs }, ...p.colors.slice(1)]
+            : [{ name: 'Default', hex: '#0A0A0A', images: imgs }];
+        }
+        if (ov.name) next.name = ov.name;
+        if (ov.price != null) { next.price = ov.price; next.basePrice = ov.price; }
+        return next;
+      });
 
       // Attach custom categories to each product
       const assignMap = new Map();
@@ -487,8 +507,9 @@ function ProductCarousel({ products: items }) {
 /* ═══ PAGES ═══ */
 
 function HomePage() {
-  const { products } = useProducts();
+  const { products, customCategories } = useProducts();
   const featured = products.slice(0, 6);
+  const categoryTiles = (customCategories || []).filter(c => c.image_url);
   const [heroLoaded, setHeroLoaded] = useState(false);
 
   return (
@@ -594,6 +615,31 @@ function HomePage() {
         <ProductCarousel products={featured} />
       </section>
 
+      {/* SHOP BY CATEGORY */}
+      {categoryTiles.length > 0 && (
+        <section className="category-section">
+          <div className="products-header">
+            <h2 className="products-title">Shop by Category</h2>
+            <Link to="/shop" className="products-link">View All <ArrowRight size={14} /></Link>
+          </div>
+          <div className="category-grid">
+            {categoryTiles.map(cat => (
+              <Link
+                key={cat.id}
+                to={`/shop?category=${encodeURIComponent(cat.name)}`}
+                className="category-tile glitch-img-wrap"
+              >
+                <img src={cat.image_url} alt={cat.name} loading="lazy" />
+                <div className="category-tile-overlay">
+                  <span className="category-tile-name">{cat.name}</span>
+                  <span className="category-tile-cta">Shop <ArrowRight size={12} /></span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* MARQUEE 2 */}
       <Marquee>
         <span className="red">NO REVERSE</span> <span>&rarr;</span> <span className="filled">KEEP MOVING</span> <span>&rarr;</span> <span>SHIFT</span> <span>&rarr;</span>
@@ -671,16 +717,25 @@ function HomePage() {
 
 function ShopPage() {
   const { products, categories, customCategories, loading } = useProducts();
+  const [searchParams] = useSearchParams();
   const [activeFilter, setActiveFilter] = useState('all');
 
+  // Preselect a category when arriving from a homepage tile (?category=Name).
+  useEffect(() => {
+    const cat = searchParams.get('category');
+    if (cat) setActiveFilter(cat);
+  }, [searchParams]);
+
   // Use custom categories if available, fall back to FE categories
-  const filters = customCategories.length > 0
-    ? [{ id: 'all', name: 'All' }, ...customCategories.map(c => ({ id: c.name, name: c.name }))]
+  const hasCustom = customCategories.length > 0;
+  const filters = hasCustom
+    ? [{ id: 'all', name: 'All' }, ...customCategories.map(c => ({ id: c.name, name: c.name, image_url: c.image_url }))]
     : [{ id: 'all', name: 'All' }, ...categories.map(c => ({ id: c.id || c.name, name: c.name }))];
+  const usePhotoTiles = hasCustom && customCategories.some(c => c.image_url);
 
   const filtered = activeFilter === 'all'
     ? products
-    : customCategories.length > 0
+    : hasCustom
       ? products.filter(p => (p.customCategories || []).includes(activeFilter))
       : products.filter(p => p.category === activeFilter);
 
@@ -691,17 +746,32 @@ function ShopPage() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
           <h1 className="shop-title"><GlitchText>Shop All</GlitchText></h1>
           {filters.length > 1 && (
-            <div className="shop-filters">
-              {filters.map(c => (
-                <button
-                  key={c.id}
-                  className={`filter-btn ${activeFilter === c.id ? 'active' : ''}`}
-                  onClick={() => setActiveFilter(c.id)}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
+            usePhotoTiles ? (
+              <div className="shop-cat-tiles">
+                {filters.map(c => (
+                  <button
+                    key={c.id}
+                    className={`shop-cat-tile ${activeFilter === c.id ? 'active' : ''} ${c.image_url ? 'has-photo' : ''}`}
+                    onClick={() => setActiveFilter(c.id)}
+                    style={c.image_url ? { backgroundImage: `linear-gradient(rgba(10,10,10,.35), rgba(10,10,10,.65)), url(${c.image_url})` } : {}}
+                  >
+                    <span>{c.name}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="shop-filters">
+                {filters.map(c => (
+                  <button
+                    key={c.id}
+                    className={`filter-btn ${activeFilter === c.id ? 'active' : ''}`}
+                    onClick={() => setActiveFilter(c.id)}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )
           )}
         </motion.div>
       </div>
@@ -1404,6 +1474,277 @@ function AdminProductsPage({ adminPassword }) {
   );
 }
 
+/* ═══ ADMIN MEDIA — uploads, category photos, custom products ═══ */
+
+// Resize/compress an image File to a data URL so uploads stay small + fast.
+function fileToResizedDataUrl(file, maxDim = 1400, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        const isPng = /png/i.test(file.type);
+        resolve(canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadImageFile(file, { folder, name, adminPassword }) {
+  const dataUrl = await fileToResizedDataUrl(file);
+  const res = await fetch('/api/admin/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+    body: JSON.stringify({ dataUrl, folder, name }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Upload failed');
+  return data.url;
+}
+
+function AdminMediaPage({ adminPassword }) {
+  const [section, setSection] = useState('categories'); // categories | custom | overrides
+  const [categories, setCategories] = useState([]);
+  const [customProducts, setCustomProducts] = useState([]);
+  const [feedProducts, setFeedProducts] = useState([]);
+  const [overrides, setOverrides] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
+  const [draft, setDraft] = useState({ name: '', price: '', description: '', sizes: '', image_urls: [] });
+  const [ovSearch, setOvSearch] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [catRes, contentRes, prodRes, pfRes, shRes] = await Promise.all([
+        fetch('/api/admin/categories'),
+        fetch('/api/admin/content'),
+        fetch('/api/products'),
+        fetch('/api/printify/products').catch(() => null),
+        fetch('/api/shopify/products').catch(() => null),
+      ]);
+      const catData = await catRes.json();
+      const content = await contentRes.json();
+      const prodData = await prodRes.json();
+      const pfData = pfRes ? await pfRes.json().catch(() => ({ products: [] })) : { products: [] };
+      const shData = shRes ? await shRes.json().catch(() => ({ products: [] })) : { products: [] };
+      setCategories(catData.categories || []);
+      setOverrides(content.overrides || {});
+      setCustomProducts(content.customProducts || []);
+      setFeedProducts([...(prodData.products || []), ...(pfData.products || []), ...(shData.products || [])]);
+    } catch (e) { setStatusMsg(e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const post = async (url, body) => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+    return data;
+  };
+
+  const withBusy = async (label, fn) => {
+    setBusy(true); setStatusMsg(label);
+    try { await fn(); }
+    catch (e) { setStatusMsg(e.message); setBusy(false); return; }
+    setBusy(false);
+  };
+
+  // ── Category photos ──
+  const setCategoryPhoto = (catId, file) => withBusy('Uploading photo…', async () => {
+    const url = await uploadImageFile(file, { folder: 'categories', name: 'category', adminPassword });
+    await post('/api/admin/categories', { action: 'setCategoryImage', categoryId: catId, imageUrl: url });
+    setStatusMsg('Category photo saved ✓');
+    await load();
+  });
+  const clearCategoryPhoto = (catId) => withBusy('Removing…', async () => {
+    await post('/api/admin/categories', { action: 'setCategoryImage', categoryId: catId, imageUrl: null });
+    await load();
+  });
+
+  // ── Custom products ──
+  const addDraftImage = (file) => withBusy('Uploading image…', async () => {
+    const url = await uploadImageFile(file, { folder: 'products', name: draft.name || 'product', adminPassword });
+    setDraft(d => ({ ...d, image_urls: [...d.image_urls, url] }));
+    setStatusMsg('Image added ✓');
+  });
+  const createCustom = (e) => {
+    e.preventDefault();
+    if (!draft.name.trim()) { setStatusMsg('Name required'); return; }
+    withBusy('Creating…', async () => {
+      await post('/api/admin/content', {
+        action: 'createCustomProduct',
+        name: draft.name, description: draft.description, price: draft.price,
+        imageUrls: draft.image_urls,
+        sizes: draft.sizes.split(',').map(s => s.trim()).filter(Boolean),
+      });
+      setDraft({ name: '', price: '', description: '', sizes: '', image_urls: [] });
+      setStatusMsg('Product created ✓');
+      await load();
+    });
+  };
+  const deleteCustom = (id) => {
+    if (!confirm('Delete this product?')) return;
+    withBusy('Deleting…', async () => {
+      await post('/api/admin/content', { action: 'deleteCustomProduct', id });
+      await load();
+    });
+  };
+
+  // ── Overrides on feed products ──
+  const addOverrideImage = (product, file) => withBusy('Uploading mockup…', async () => {
+    const url = await uploadImageFile(file, { folder: 'overrides', name: product.name, adminPassword });
+    const cur = overrides[product.id] || {};
+    await post('/api/admin/content', {
+      action: 'setOverride',
+      productId: product.id,
+      imageUrls: [...(cur.image_urls || []), url],
+      name: cur.name || null,
+      price: cur.price ?? null,
+    });
+    setStatusMsg('Mockup added ✓');
+    await load();
+  });
+  const clearOverride = (productId) => withBusy('Clearing…', async () => {
+    await post('/api/admin/content', { action: 'clearOverride', productId });
+    await load();
+  });
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><Loader size={24} className="spin" /></div>;
+
+  const filteredFeed = feedProducts.filter(p =>
+    !ovSearch || p.name.toLowerCase().includes(ovSearch.toLowerCase()));
+
+  return (
+    <div className="admin-media">
+      <div className="admin-media-tabs">
+        <button className={section === 'categories' ? 'active' : ''} onClick={() => setSection('categories')}>Category Photos</button>
+        <button className={section === 'custom' ? 'active' : ''} onClick={() => setSection('custom')}>Custom Products</button>
+        <button className={section === 'overrides' ? 'active' : ''} onClick={() => setSection('overrides')}>Product Photos</button>
+      </div>
+      {statusMsg && <div className="admin-media-status">{busy && <Loader size={12} className="spin" />} {statusMsg}</div>}
+
+      {/* ── Category Photos ── */}
+      {section === 'categories' && (
+        <div className="admin-media-body">
+          <p className="admin-media-hint">Give each category a photo. It shows in the “Shop by Category” grid on the homepage and as tiles on the Shop page. (Create categories in the Products tab.)</p>
+          {categories.length === 0 && <p className="admin-media-empty">No categories yet — add some under the Products tab first.</p>}
+          <div className="admin-media-grid">
+            {categories.map(cat => (
+              <div key={cat.id} className="admin-media-card">
+                <div className="admin-media-thumb" style={cat.image_url ? { backgroundImage: `url(${cat.image_url})` } : {}}>
+                  {!cat.image_url && <span>No photo</span>}
+                </div>
+                <div className="admin-media-card-body">
+                  <strong>{cat.name}</strong>
+                  <div className="admin-media-card-actions">
+                    <label className="admin-upload-btn">
+                      {cat.image_url ? 'Replace' : 'Upload photo'}
+                      <input type="file" accept="image/*" disabled={busy} onChange={e => e.target.files[0] && setCategoryPhoto(cat.id, e.target.files[0])} />
+                    </label>
+                    {cat.image_url && <button className="admin-link-btn" disabled={busy} onClick={() => clearCategoryPhoto(cat.id)}>Remove</button>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Custom Products ── */}
+      {section === 'custom' && (
+        <div className="admin-media-body admin-media-2col">
+          <form className="admin-product-form" onSubmit={createCustom}>
+            <h3>New Product</h3>
+            <label>Name<input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} placeholder="e.g. SHIFT Signature Tee" /></label>
+            <label>Price (USD)<input type="number" step="0.01" value={draft.price} onChange={e => setDraft(d => ({ ...d, price: e.target.value }))} placeholder="45.00" /></label>
+            <label>Sizes (comma-separated)<input value={draft.sizes} onChange={e => setDraft(d => ({ ...d, sizes: e.target.value }))} placeholder="S, M, L, XL" /></label>
+            <label>Description<textarea rows={3} value={draft.description} onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} placeholder="Short product description" /></label>
+            <div className="admin-thumb-row">
+              {draft.image_urls.map((url, i) => (
+                <div key={i} className="admin-thumb-mini" style={{ backgroundImage: `url(${url})` }}>
+                  <button type="button" onClick={() => setDraft(d => ({ ...d, image_urls: d.image_urls.filter((_, j) => j !== i) }))}>×</button>
+                </div>
+              ))}
+              <label className="admin-thumb-add">+
+                <input type="file" accept="image/*" disabled={busy} onChange={e => e.target.files[0] && addDraftImage(e.target.files[0])} />
+              </label>
+            </div>
+            <button type="submit" disabled={busy} className="admin-primary-btn">Create Product</button>
+          </form>
+          <div className="admin-custom-list">
+            <h3>Your Custom Products ({customProducts.length})</h3>
+            {customProducts.length === 0 && <p className="admin-media-empty">None yet — create one on the left.</p>}
+            {customProducts.map(cp => (
+              <div key={cp.id} className="admin-custom-row">
+                <div className="admin-media-thumb sm" style={cp.image ? { backgroundImage: `url(${cp.image})` } : {}}>{!cp.image && <span>—</span>}</div>
+                <div className="admin-custom-info">
+                  <strong>{cp.name}</strong>
+                  <span>${cp.price.toFixed(2)} · {cp.sizes.length} sizes · {cp.colors[0]?.images.length || 0} photos</span>
+                </div>
+                <button className="admin-link-btn danger" disabled={busy} onClick={() => deleteCustom(cp.customProductId)}>Delete</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Product Photos (overrides) ── */}
+      {section === 'overrides' && (
+        <div className="admin-media-body">
+          <p className="admin-media-hint">Replace the default feed photos with your own mockups. Uploaded photos show on the product card and page.</p>
+          <input className="admin-media-search" placeholder="Search products…" value={ovSearch} onChange={e => setOvSearch(e.target.value)} />
+          <div className="admin-media-grid">
+            {filteredFeed.map(p => {
+              const ov = overrides[p.id];
+              const hasOverride = ov && ov.image_urls && ov.image_urls.length;
+              const thumb = hasOverride ? ov.image_urls[0] : (p.image || p.colors?.[0]?.images?.[0]?.url);
+              return (
+                <div key={p.id} className={`admin-media-card ${hasOverride ? 'has-override' : ''}`}>
+                  <div className="admin-media-thumb" style={thumb ? { backgroundImage: `url(${thumb})` } : {}}>
+                    {hasOverride && <span className="admin-badge">Custom photo</span>}
+                  </div>
+                  <div className="admin-media-card-body">
+                    <strong title={p.name}>{p.name}</strong>
+                    <span className="admin-src-tag">{p.source}</span>
+                    <div className="admin-media-card-actions">
+                      <label className="admin-upload-btn">
+                        {hasOverride ? 'Add another' : 'Upload mockup'}
+                        <input type="file" accept="image/*" disabled={busy} onChange={e => e.target.files[0] && addOverrideImage(p, e.target.files[0])} />
+                      </label>
+                      {hasOverride && <button className="admin-link-btn" disabled={busy} onClick={() => clearOverride(p.id)}>Reset</button>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminDashboard({ adminPassword }) {
   const [adminPage, setAdminPage] = useState('orders');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1438,6 +1779,7 @@ function AdminDashboard({ adminPassword }) {
           <nav className="admin-menu-panel" onClick={e => e.stopPropagation()}>
             <button className="admin-menu-close" onClick={() => setMenuOpen(false)}><X size={20} /></button>
             <button className={adminPage === 'products' ? 'active' : ''} onClick={() => { setAdminPage('products'); setMenuOpen(false); }}>Products</button>
+            <button className={adminPage === 'media' ? 'active' : ''} onClick={() => { setAdminPage('media'); setMenuOpen(false); }}>Media</button>
             <button className={adminPage === 'orders' ? 'active' : ''} onClick={() => { setAdminPage('orders'); setMenuOpen(false); }}>Orders</button>
           </nav>
         </div>
@@ -1445,6 +1787,7 @@ function AdminDashboard({ adminPassword }) {
 
       {adminPage === 'orders' && <AdminOrdersPage adminPassword={adminPassword} />}
       {adminPage === 'products' && <AdminProductsPage adminPassword={adminPassword} />}
+      {adminPage === 'media' && <AdminMediaPage adminPassword={adminPassword} />}
     </div>
   );
 }

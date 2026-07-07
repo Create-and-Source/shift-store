@@ -74,6 +74,19 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true })
     }
 
+    if (action === 'setCategoryImage') {
+      const { categoryId, imageUrl } = req.body
+      if (!categoryId) return res.status(400).json({ error: 'categoryId required' })
+
+      const { error } = await supabase
+        .from('categories')
+        .update({ image_url: imageUrl || null })
+        .eq('id', categoryId)
+
+      if (error) return res.status(500).json({ error: error.message })
+      return res.status(200).json({ ok: true })
+    }
+
     if (action === 'deleteCategory') {
       const { categoryId } = req.body
       if (!categoryId) return res.status(400).json({ error: 'categoryId required' })
