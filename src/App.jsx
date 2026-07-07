@@ -650,22 +650,19 @@ function HomePage() {
       {/* PHOTO GRID */}
       <div className="photo-grid">
         <div className="photo-grid-item tall glitch-img-wrap">
-          <img src="/lifestyle/chinatown.jpg" alt="Shift Chinatown" loading="lazy" />
+          <img src="/lifestyle/shift-walk.jpg" alt="Shift — life keeps moving" loading="lazy" />
         </div>
         <div className="photo-grid-item glitch-img-wrap">
-          <img src="/lifestyle/nyc-convertible.png" alt="Shift NYC" loading="lazy" />
+          <img src="/lifestyle/shift-convertible.jpg" alt="Shift NYC convertible" loading="lazy" />
         </div>
         <div className="photo-grid-item glitch-img-wrap">
-          <img src="/lifestyle/car-meet.png" alt="Shift car meet" loading="lazy" />
+          <img src="/lifestyle/shift-caps.jpg" alt="Shift caps in SoHo" loading="lazy" />
         </div>
         <div className="photo-grid-item glitch-img-wrap">
-          <img src="/lifestyle/coffee-shop.png" alt="Shift coffee" loading="lazy" />
-        </div>
-        <div className="photo-grid-item tall glitch-img-wrap">
-          <img src="/lifestyle/nyc-crosswalk.png" alt="Shift crosswalk" loading="lazy" />
+          <img src="/lifestyle/shift-alley.jpg" alt="Shift hoodies" loading="lazy" />
         </div>
         <div className="photo-grid-item glitch-img-wrap">
-          <img src="/lifestyle/pool-party.png" alt="Shift poolside" loading="lazy" />
+          <img src="/lifestyle/shift-skate.jpg" alt="Shift skate" loading="lazy" />
         </div>
       </div>
 
