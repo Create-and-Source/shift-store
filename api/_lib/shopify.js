@@ -303,3 +303,40 @@ export async function getShopifyOrderTracking(orderGid) {
   }
   return null
 }
+
+// ─── Webhooks ───────────────────────────────────────────────────────────
+
+const WEBHOOKS_LIST = `
+query { webhookSubscriptions(first: 100) {
+  edges { node { id topic endpoint { __typename ... on WebhookHttpEndpoint { callbackUrl } } } }
+} }`
+
+export async function listShopifyWebhooks() {
+  const data = await adminGql(WEBHOOKS_LIST)
+  return (data?.webhookSubscriptions?.edges || []).map(e => ({
+    id: e.node.id,
+    topic: e.node.topic,
+    callbackUrl: e.node.endpoint?.callbackUrl || '',
+  }))
+}
+
+const WEBHOOK_CREATE = `
+mutation Create($topic: WebhookSubscriptionTopic!, $sub: WebhookSubscriptionInput!) {
+  webhookSubscriptionCreate(topic: $topic, webhookSubscription: $sub) {
+    userErrors { field message }
+    webhookSubscription { id }
+  }
+}`
+
+// Register an HTTPS webhook (e.g. topic ORDERS_FULFILLED). Shopify signs each
+// delivery with the app's API secret (verified in the receiver).
+export async function createShopifyWebhook({ topic, callbackUrl }) {
+  const data = await adminGql(WEBHOOK_CREATE, { topic, sub: { callbackUrl, format: 'JSON' } })
+  const errs = data?.webhookSubscriptionCreate?.userErrors || []
+  if (errs.length) {
+    const err = new Error('Shopify webhookSubscriptionCreate: ' + errs.map(e => e.message).join('; '))
+    err.body = errs
+    throw err
+  }
+  return data?.webhookSubscriptionCreate?.webhookSubscription
+}

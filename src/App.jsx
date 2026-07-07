@@ -1964,6 +1964,22 @@ function AdminOrdersPage({ adminPassword }) {
     setSyncing(false);
   };
 
+  // One-time: register the real-time tracking webhooks with Printify + Shopify.
+  const setupWebhooks = async () => {
+    setSyncing(true); setSyncMsg('');
+    try {
+      const res = await fetch('/api/setup-webhooks', { headers: { 'x-admin-key': adminPassword } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Setup failed');
+      const s = data.shopify?.status || 'n/a';
+      const p = data.printify?.status || 'n/a';
+      setSyncMsg(`Real-time tracking — Shopify: ${s}, Printify: ${p}.`);
+    } catch (err) {
+      setSyncMsg(err.message);
+    }
+    setSyncing(false);
+  };
+
   const updateOrder = async (orderId, updates) => {
     await fetch('/api/admin/orders', {
       method: 'PATCH',
@@ -2005,7 +2021,10 @@ function AdminOrdersPage({ adminPassword }) {
             {s === 'all' ? 'All Orders' : s.charAt(0).toUpperCase() + s.slice(1)}
           </button>
         ))}
-        <button className="filter-btn sync-btn" onClick={syncTracking} disabled={syncing} style={{ marginLeft: 'auto' }}>
+        <button className="filter-btn sync-btn" onClick={setupWebhooks} disabled={syncing} style={{ marginLeft: 'auto' }} title="One-time: turn on real-time tracking updates">
+          Enable real-time
+        </button>
+        <button className="filter-btn sync-btn" onClick={syncTracking} disabled={syncing}>
           {syncing ? <><Loader size={12} className="spin" /> Syncing…</> : <><Truck size={12} /> Sync tracking</>}
         </button>
       </div>

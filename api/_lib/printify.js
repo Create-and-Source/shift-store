@@ -235,6 +235,24 @@ export function printifyTrackingFrom(order) {
   return { number: ship.number, url: ship.url || '', carrier: ship.carrier || '' }
 }
 
+// ─── Webhooks ───────────────────────────────────────────────────────────
+
+export async function listPrintifyWebhooks() {
+  const shopId = await getShopId()
+  return pf(`/shops/${shopId}/webhooks.json`)
+}
+
+// Register a webhook (idempotent-ish: caller should skip if the topic+url pair
+// already exists). `secret` is echoed back by Printify as an HMAC-SHA256
+// signature on each delivery so the receiver can verify authenticity.
+export async function createPrintifyWebhook({ topic, url, secret }) {
+  const shopId = await getShopId()
+  return pf(`/shops/${shopId}/webhooks.json`, {
+    method: 'POST',
+    body: JSON.stringify({ topic, url, ...(secret ? { secret } : {}) }),
+  })
+}
+
 // ─── Shipping rates ─────────────────────────────────────────────────────
 
 // The store ships US-only, and Printify's US "standard" rate is provider-set
