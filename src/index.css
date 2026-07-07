@@ -2650,6 +2650,11 @@ img { max-width: 100%; display: block; }
   color: rgba(255,255,255,.85); font-size: 10px; font-weight: 700; margin-top: 5px;
   text-transform: uppercase; letter-spacing: .12em; display: inline-flex; align-items: center; gap: 5px;
 }
+/* Phone: force a real 2-up grid (the flex tiles won't shrink to fit two per row). */
+@media (max-width: 640px) {
+  .category-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .category-tile { flex: none; }
+}
 
 /* ═══ SHOP PAGE CATEGORY TILES ═══ */
 .shop-cat-tiles {
