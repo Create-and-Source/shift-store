@@ -839,6 +839,14 @@ function ShopPage() {
   );
 }
 
+// Tidy size labels: short abbreviations + a canonical order, so a feed's
+// "X-Small / XX-Large" render as clean, consistently-ordered chips (the raw
+// s.name is still what goes to the cart).
+const SIZE_ABBR = { 'xx-small': 'XXS', 'x-small': 'XS', 'small': 'S', 'medium': 'M', 'large': 'L', 'x-large': 'XL', 'xx-large': '2XL', 'xxx-large': '3XL', 'xxxx-large': '4XL' };
+const SIZE_ORDER = ['xxs', 'xx-small', 'xs', 'x-small', 's', 'small', 'm', 'medium', 'l', 'large', 'xl', 'x-large', '2xl', 'xxl', 'xx-large', '3xl', 'xxxl', 'xxx-large', '4xl', 'xxxx-large'];
+const sizeAbbr = (name) => SIZE_ABBR[String(name).trim().toLowerCase()] || name;
+const sizeRank = (name) => { const i = SIZE_ORDER.indexOf(String(name).trim().toLowerCase()); return i === -1 ? 999 : i; };
+
 function ProductPage() {
   const { id } = useParams();
   const { products, loading } = useProducts();
@@ -952,13 +960,15 @@ function ProductPage() {
             <>
               <div className="pdp-label">Size</div>
               <div className="size-options">
-                {product.sizes.map(s => (
+                {[...product.sizes].sort((a, b) => sizeRank(a.name) - sizeRank(b.name)).map(s => (
                   <button
                     key={s.name}
                     className={`size-btn ${selectedSize === s.name ? 'active' : ''}`}
                     onClick={() => setSelectedSize(s.name)}
+                    title={s.name}
                   >
-                    {s.name}{s.surcharge > 0 ? ` (+$${s.surcharge.toFixed(2)})` : ''}
+                    <span>{sizeAbbr(s.name)}</span>
+                    {s.surcharge > 0 && <span className="size-surcharge">+${s.surcharge.toFixed(2)}</span>}
                   </button>
                 ))}
               </div>

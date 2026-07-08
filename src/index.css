@@ -1227,19 +1227,32 @@ img { max-width: 100%; display: block; }
   box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.45), 0 0 0 2px var(--bg), 0 0 0 4px var(--red);
 }
 
-.size-options { display: flex; gap: 8px; margin-bottom: 40px; }
+.size-options { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 40px; }
 
 .size-btn {
-  width: 48px;
-  height: 48px;
+  min-width: 52px;
+  height: 52px;
+  padding: 0 14px;
   border: 1px solid var(--gray-dim);
   color: var(--white);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1px;
+  line-height: 1.05;
+  white-space: nowrap;
+  cursor: pointer;
   transition: all 0.2s;
+}
+
+.size-btn .size-surcharge {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--gray);
 }
 
 .size-btn:hover { border-color: var(--gray); }
@@ -1249,6 +1262,8 @@ img { max-width: 100%; display: block; }
   color: var(--white);
   border-color: var(--red);
 }
+
+.size-btn.active .size-surcharge { color: rgba(255, 255, 255, 0.85); }
 
 .add-btn {
   width: 100%;
