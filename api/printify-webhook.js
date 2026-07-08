@@ -1,5 +1,5 @@
 import { printifyEnabled, getPrintifyOrder, printifyTrackingFrom } from './_lib/printify.js'
-import { readRawBody, verifyHmac, saveTrackingByColumn } from './_lib/tracking.js'
+import { readRawBody, webhookAuthorized, saveTrackingByColumn } from './_lib/tracking.js'
 
 // Real-time tracking from Printify. Register `order:shipment:created` and
 // `order:shipment:delivered` to point here (see /api/setup-webhooks).
@@ -15,11 +15,12 @@ export default async function handler(req, res) {
 
   const raw = await readRawBody(req)
 
-  // Printify signs deliveries as `sha256=<hex>` in x-pfy-signature.
-  const sigHeader = req.headers['x-pfy-signature'] || ''
-  const signature = String(sigHeader).replace(/^sha256=/, '')
-  const verified = verifyHmac({ raw, signature, secret: process.env.PRINTIFY_WEBHOOK_SECRET, encoding: 'hex' })
-  if (verified === false) return res.status(401).json({ error: 'Bad signature' })
+  // Auth: ?token= on the callback URL (set at registration), or an HMAC
+  // signature if Printify sends one. Open when no secret is configured.
+  const signature = String(req.headers['x-pfy-signature'] || '').replace(/^sha256=/, '')
+  if (!webhookAuthorized({ req, raw, secret: process.env.PRINTIFY_WEBHOOK_SECRET, signature, encoding: 'hex' })) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
 
   let event = {}
   try { event = JSON.parse(raw.toString()) } catch { return res.status(400).json({ error: 'Bad JSON' }) }

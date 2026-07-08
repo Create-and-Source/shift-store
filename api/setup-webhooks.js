@@ -1,5 +1,5 @@
 import { shopifyAdminEnabled, listShopifyWebhooks, createShopifyWebhook } from './_lib/shopify.js'
-import { printifyEnabled, listPrintifyWebhooks, createPrintifyWebhook } from './_lib/printify.js'
+import { printifyEnabled, listPrintifyWebhooks, createPrintifyWebhook, deletePrintifyWebhook } from './_lib/printify.js'
 
 // One-time (idempotent) registration of the real-time tracking webhooks with
 // Printify + Shopify, pointing at this deployment. Admin-only; safe to re-run —
@@ -18,10 +18,14 @@ export default async function handler(req, res) {
 
   const host = req.headers['x-forwarded-host'] || req.headers.host
   const base = `https://${host}`
-  const shopifyUrl = `${base}/api/shopify-webhook`
-  const printifyUrl = `${base}/api/printify-webhook`
+  // Append a secret ?token= so the receivers can authenticate the callback
+  // without depending on each provider's (undocumented) signing scheme.
+  const shTok = process.env.SHOPIFY_WEBHOOK_SECRET
+  const pfTok = process.env.PRINTIFY_WEBHOOK_SECRET
+  const shopifyUrl = `${base}/api/shopify-webhook${shTok ? `?token=${encodeURIComponent(shTok)}` : ''}`
+  const printifyUrl = `${base}/api/printify-webhook${pfTok ? `?token=${encodeURIComponent(pfTok)}` : ''}`
 
-  const out = { base, shopify: [], printify: [] }
+  const out = { base, secured: { shopify: !!shTok, printify: !!pfTok }, shopify: [], printify: [] }
 
   // ── Shopify ──
   if (shopifyAdminEnabled()) {
@@ -47,17 +51,17 @@ export default async function handler(req, res) {
   }
 
   // ── Printify ──
+  // Delete any existing webhook pointing at our receiver (regardless of query
+  // string), then create fresh so the current ?token= secret is applied.
   if (printifyEnabled()) {
     try {
       const existing = await listPrintifyWebhooks()
+      const ours = (Array.isArray(existing) ? existing : []).filter(w => (w.url || '').includes('/api/printify-webhook'))
+      for (const w of ours) { try { await deletePrintifyWebhook(w.id) } catch { /* ignore */ } }
       for (const topic of PRINTIFY_TOPICS) {
         try {
-          if (Array.isArray(existing) && existing.some(w => w.topic === topic && w.url === printifyUrl)) {
-            out.printify.push({ topic, status: 'already-registered' })
-          } else {
-            const wh = await createPrintifyWebhook({ topic, url: printifyUrl, secret: process.env.PRINTIFY_WEBHOOK_SECRET })
-            out.printify.push({ topic, status: 'registered', id: wh?.id })
-          }
+          const wh = await createPrintifyWebhook({ topic, url: printifyUrl, secret: pfTok })
+          out.printify.push({ topic, status: 'registered', id: wh?.id, secured: !!pfTok })
         } catch (err) {
           out.printify.push({ topic, status: 'error', error: err.message })
         }

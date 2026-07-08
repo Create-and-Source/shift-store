@@ -253,6 +253,11 @@ export async function createPrintifyWebhook({ topic, url, secret }) {
   })
 }
 
+export async function deletePrintifyWebhook(id) {
+  const shopId = await getShopId()
+  return pf(`/shops/${shopId}/webhooks/${id}.json`, { method: 'DELETE' })
+}
+
 // ─── Shipping rates ─────────────────────────────────────────────────────
 
 // The store ships US-only, and Printify's US "standard" rate is provider-set

@@ -1,5 +1,5 @@
 import { getShopifyOrderTracking } from './_lib/shopify.js'
-import { readRawBody, verifyHmac, saveTrackingByColumn } from './_lib/tracking.js'
+import { readRawBody, webhookAuthorized, saveTrackingByColumn } from './_lib/tracking.js'
 
 // Real-time tracking from Shopify. Register both topics to point here
 // (see /api/setup-webhooks):
@@ -24,10 +24,12 @@ export default async function handler(req, res) {
 
   const raw = await readRawBody(req)
 
-  // Shopify signs deliveries as base64 HMAC-SHA256 in x-shopify-hmac-sha256.
+  // Auth: ?token= on the callback URL, or Shopify's base64 HMAC-SHA256
+  // (x-shopify-hmac-sha256, signed with the app secret). Open when unset.
   const signature = req.headers['x-shopify-hmac-sha256'] || ''
-  const verified = verifyHmac({ raw, signature, secret: process.env.SHOPIFY_WEBHOOK_SECRET, encoding: 'base64' })
-  if (verified === false) return res.status(401).json({ error: 'Bad signature' })
+  if (!webhookAuthorized({ req, raw, secret: process.env.SHOPIFY_WEBHOOK_SECRET, signature, encoding: 'base64' })) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
 
   let payload = {}
   try { payload = JSON.parse(raw.toString()) } catch { return res.status(400).json({ error: 'Bad JSON' }) }

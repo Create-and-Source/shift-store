@@ -29,6 +29,20 @@ export function verifyHmac({ raw, signature, secret, encoding = 'hex' }) {
   return a.length === b.length && crypto.timingSafeEqual(a, b)
 }
 
+// The `token` query param off the callback URL (set at webhook registration).
+// Robust regardless of body parsing / provider signing quirks.
+export function tokenFromUrl(req) {
+  try { return new URL(req.url, 'http://x').searchParams.get('token') } catch { return null }
+}
+
+// Combined webhook auth. When `secret` is set, require EITHER a matching
+// ?token= on the URL OR a valid HMAC signature; otherwise (no secret) allow.
+export function webhookAuthorized({ req, raw, secret, signature, encoding }) {
+  if (!secret) return true // unconfigured → accept (documented, lower security)
+  if (tokenFromUrl(req) === secret) return true
+  return verifyHmac({ raw, signature, secret, encoding }) === true
+}
+
 // Write tracking (and/or advance status) onto the order matched by
 // `column = value` (e.g. printify_order_id / shopify_order_id).
 //   targetStatus 'shipped'   → set shipped if still new/processing
