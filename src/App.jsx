@@ -1971,14 +1971,11 @@ function AdminOrdersPage({ adminPassword }) {
       const res = await fetch('/api/setup-webhooks', { headers: { 'x-admin-key': adminPassword } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Setup failed');
-      const summarize = (arr) => {
-        if (!Array.isArray(arr) || !arr.length) return 'n/a';
-        const ok = arr.filter(x => x.status === 'registered' || x.status === 'already-registered').length;
-        const err = arr.find(x => x.status === 'error');
-        if (err) return `error (${err.error})`;
-        return `${ok}/${arr.length} topics on`;
-      };
-      setSyncMsg(`Real-time tracking — Shopify: ${summarize(data.shopify)}, Printify: ${summarize(data.printify)}.`);
+      const shortTopic = (t = '') => t.toLowerCase().replace(/^orders?[_/:]?/, '').replace(/[_:]/g, ' ');
+      const detail = (arr) => (Array.isArray(arr) ? arr : [])
+        .map(x => `${shortTopic(x.topic) || x.status}: ${x.status === 'error' ? '✗ ' + x.error : (x.status.startsWith('already') ? 'on' : x.status)}`)
+        .join('  ·  ');
+      setSyncMsg(`SHOPIFY → ${detail(data.shopify) || 'n/a'}    |    PRINTIFY → ${detail(data.printify) || 'n/a'}`);
     } catch (err) {
       setSyncMsg(err.message);
     }
