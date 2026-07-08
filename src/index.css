@@ -2477,6 +2477,15 @@ img { max-width: 100%; display: block; }
   -webkit-appearance: none;
   margin: 0;
 }
+.admin-price-earn {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #1f9d55; /* green — profit */
+  white-space: nowrap;
+}
+.admin-price-earn.neg { color: #e53e3e; } /* red — below cost */
+.admin-price-earn.flat { color: #999; }   /* grey — selling at cost */
 .admin-cat-hide-btn {
   padding: 6px 12px;
   background: #f5f5f5;

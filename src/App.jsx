@@ -1635,6 +1635,15 @@ function AdminProductsPage({ adminPassword }) {
                     />
                     {savingId === product.id && <Loader size={12} className="spin" />}
                   </label>
+                  {(() => {
+                    const raw = priceDrafts[product.id];
+                    const sell = raw != null && raw !== '' && !isNaN(Number(raw)) ? Number(raw) : product.price;
+                    const profit = sell - product.price;
+                    const margin = sell > 0 ? Math.round((profit / sell) * 100) : 0;
+                    if (profit > 0) return <small className="admin-price-earn">You earn ${profit.toFixed(2)} · {margin}%</small>;
+                    if (profit < 0) return <small className="admin-price-earn neg">Below cost −${Math.abs(profit).toFixed(2)}</small>;
+                    return <small className="admin-price-earn flat">At cost — $0 profit</small>;
+                  })()}
                 </div>
                 <button className="admin-cat-hide-btn" onClick={() => toggleHidden(product.id, !isHidden)}>
                   {isHidden ? 'Show' : 'Hide'}
