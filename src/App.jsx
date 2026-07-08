@@ -1080,18 +1080,6 @@ function AboutPage() {
           <p style={{ fontSize: 15, color: 'var(--gray)', lineHeight: 1.8 }}>Your Mindset. Your Focus. Your Perspective.</p>
         </div>
       </section>
-
-      <div className="photo-grid">
-        <div className="photo-grid-item glitch-img-wrap">
-          <img src="/lifestyle/nyc-crosswalk.png" alt="NYC" loading="lazy" />
-        </div>
-        <div className="photo-grid-item glitch-img-wrap">
-          <img src="/lifestyle/pool-party.png" alt="Pool party" loading="lazy" />
-        </div>
-        <div className="photo-grid-item glitch-img-wrap">
-          <img src="/lifestyle/street-crossing.png" alt="Street" loading="lazy" />
-        </div>
-      </div>
     </>
   );
 }
