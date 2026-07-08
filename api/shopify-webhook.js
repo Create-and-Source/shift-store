@@ -1,21 +1,20 @@
 import { getShopifyOrderTracking } from './_lib/shopify.js'
 import { readRawBody, verifyHmac, saveTrackingByColumn } from './_lib/tracking.js'
 
-// Real-time tracking from Shopify. Register the `orders/fulfilled` topic to
-// point here (see /api/setup-webhooks). The payload is the Order object, which
-// carries its gid (admin_graphql_api_id) and fulfillments with tracking; we
-// write that back onto the matching Supabase order. Best-effort + always 200.
+// Real-time tracking from Shopify. Register both topics to point here
+// (see /api/setup-webhooks):
+//   orders/fulfilled     → Order payload w/ tracking      → mark shipped
+//   fulfillments/update  → Fulfillment payload w/ status  → mark delivered when
+//                          shipment_status is "delivered"
+// Best-effort + always 200 so Shopify doesn't retry on orders we don't know.
 
 export const config = { api: { bodyParser: false } }
 
-// Pull the first tracking number/url out of an orders/fulfilled payload.
-function trackingFromPayload(order) {
+// First tracking number/url out of an Order payload's fulfillments.
+function trackingFromOrder(order) {
   for (const f of order?.fulfillments || []) {
     const number = f.tracking_number || (f.tracking_numbers || [])[0]
-    if (number) {
-      const url = f.tracking_url || (f.tracking_urls || [])[0] || ''
-      return { number, url }
-    }
+    if (number) return { number, url: f.tracking_url || (f.tracking_urls || [])[0] || '' }
   }
   return null
 }
@@ -30,20 +29,33 @@ export default async function handler(req, res) {
   const verified = verifyHmac({ raw, signature, secret: process.env.SHOPIFY_WEBHOOK_SECRET, encoding: 'base64' })
   if (verified === false) return res.status(401).json({ error: 'Bad signature' })
 
-  let order = {}
-  try { order = JSON.parse(raw.toString()) } catch { return res.status(400).json({ error: 'Bad JSON' }) }
+  let payload = {}
+  try { payload = JSON.parse(raw.toString()) } catch { return res.status(400).json({ error: 'Bad JSON' }) }
 
-  // The gid we stored at order creation (gid://shopify/Order/123...).
-  const gid = order.admin_graphql_api_id
+  const topic = req.headers['x-shopify-topic'] || ''
+  let gid, tracking = null, targetStatus = 'shipped'
+
+  if (topic === 'fulfillments/update' || payload.shipment_status !== undefined) {
+    // Fulfillment payload: carries order_id (numeric) + shipment_status.
+    if (payload.order_id) gid = `gid://shopify/Order/${payload.order_id}`
+    const number = payload.tracking_number || (payload.tracking_numbers || [])[0]
+    if (number) tracking = { number, url: payload.tracking_url || (payload.tracking_urls || [])[0] || '' }
+    if (payload.shipment_status === 'delivered') targetStatus = 'delivered'
+  } else {
+    // Order payload (orders/fulfilled): has the order gid + fulfillments.
+    gid = payload.admin_graphql_api_id
+    tracking = trackingFromOrder(payload)
+  }
+
   if (!gid) return res.status(200).json({ received: true, skipped: 'no order gid' })
 
   try {
-    // Prefer tracking already in the payload; fall back to an Admin API lookup.
-    let tracking = trackingFromPayload(order)
+    // Fill in tracking from the Admin API if the payload didn't include it.
     if (!tracking) tracking = await getShopifyOrderTracking(gid)
-    if (!tracking) return res.status(200).json({ received: true, noTracking: true })
+    // A delivered event still advances status even without new tracking.
+    if (!tracking && targetStatus !== 'delivered') return res.status(200).json({ received: true, noTracking: true })
 
-    const result = await saveTrackingByColumn('shopify_order_id', gid, tracking)
+    const result = await saveTrackingByColumn('shopify_order_id', gid, tracking, targetStatus)
     return res.status(200).json({ received: true, ...result })
   } catch (err) {
     console.error('Shopify webhook error (non-fatal):', err.message)

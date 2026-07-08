@@ -5,10 +5,13 @@ import { printifyEnabled, listPrintifyWebhooks, createPrintifyWebhook } from './
 // Printify + Shopify, pointing at this deployment. Admin-only; safe to re-run —
 // it skips topics already registered to our callback URLs.
 //
-//   Shopify  : orders/fulfilled          -> /api/shopify-webhook
-//   Printify : order:shipment:created    -> /api/printify-webhook
+//   Shopify  : orders/fulfilled + fulfillments/update           -> /api/shopify-webhook
+//   Printify : order:shipment:created + order:shipment:delivered -> /api/printify-webhook
 
 const ADMIN_KEY = process.env.ADMIN_KEY || 'shift-admin-2026'
+
+const SHOPIFY_TOPICS = ['ORDERS_FULFILLED', 'FULFILLMENTS_UPDATE']
+const PRINTIFY_TOPICS = ['order:shipment:created', 'order:shipment:delivered']
 
 export default async function handler(req, res) {
   if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(401).json({ error: 'Unauthorized' })
@@ -18,43 +21,52 @@ export default async function handler(req, res) {
   const shopifyUrl = `${base}/api/shopify-webhook`
   const printifyUrl = `${base}/api/printify-webhook`
 
-  const out = { base, shopify: null, printify: null }
+  const out = { base, shopify: [], printify: [] }
 
   // ── Shopify ──
   if (shopifyAdminEnabled()) {
     try {
       const existing = await listShopifyWebhooks()
-      const has = existing.some(w => w.topic === 'ORDERS_FULFILLED' && w.callbackUrl === shopifyUrl)
-      if (has) {
-        out.shopify = { status: 'already-registered', topic: 'ORDERS_FULFILLED', url: shopifyUrl }
-      } else {
-        const sub = await createShopifyWebhook({ topic: 'ORDERS_FULFILLED', callbackUrl: shopifyUrl })
-        out.shopify = { status: 'registered', topic: 'ORDERS_FULFILLED', url: shopifyUrl, id: sub?.id }
+      for (const topic of SHOPIFY_TOPICS) {
+        try {
+          if (existing.some(w => w.topic === topic && w.callbackUrl === shopifyUrl)) {
+            out.shopify.push({ topic, status: 'already-registered' })
+          } else {
+            const sub = await createShopifyWebhook({ topic, callbackUrl: shopifyUrl })
+            out.shopify.push({ topic, status: 'registered', id: sub?.id })
+          }
+        } catch (err) {
+          out.shopify.push({ topic, status: 'error', error: err.message })
+        }
       }
     } catch (err) {
-      out.shopify = { status: 'error', error: err.message }
+      out.shopify.push({ status: 'error', error: err.message })
     }
   } else {
-    out.shopify = { status: 'skipped', reason: 'Shopify admin not configured' }
+    out.shopify.push({ status: 'skipped', reason: 'Shopify admin not configured' })
   }
 
   // ── Printify ──
   if (printifyEnabled()) {
     try {
       const existing = await listPrintifyWebhooks()
-      const topic = 'order:shipment:created'
-      const has = Array.isArray(existing) && existing.some(w => w.topic === topic && w.url === printifyUrl)
-      if (has) {
-        out.printify = { status: 'already-registered', topic, url: printifyUrl }
-      } else {
-        const wh = await createPrintifyWebhook({ topic, url: printifyUrl, secret: process.env.PRINTIFY_WEBHOOK_SECRET })
-        out.printify = { status: 'registered', topic, url: printifyUrl, id: wh?.id }
+      for (const topic of PRINTIFY_TOPICS) {
+        try {
+          if (Array.isArray(existing) && existing.some(w => w.topic === topic && w.url === printifyUrl)) {
+            out.printify.push({ topic, status: 'already-registered' })
+          } else {
+            const wh = await createPrintifyWebhook({ topic, url: printifyUrl, secret: process.env.PRINTIFY_WEBHOOK_SECRET })
+            out.printify.push({ topic, status: 'registered', id: wh?.id })
+          }
+        } catch (err) {
+          out.printify.push({ topic, status: 'error', error: err.message })
+        }
       }
     } catch (err) {
-      out.printify = { status: 'error', error: err.message }
+      out.printify.push({ status: 'error', error: err.message })
     }
   } else {
-    out.printify = { status: 'skipped', reason: 'Printify not configured' }
+    out.printify.push({ status: 'skipped', reason: 'Printify not configured' })
   }
 
   return res.status(200).json({ ok: true, ...out })

@@ -1,11 +1,12 @@
 import { printifyEnabled, getPrintifyOrder, printifyTrackingFrom } from './_lib/printify.js'
 import { readRawBody, verifyHmac, saveTrackingByColumn } from './_lib/tracking.js'
 
-// Real-time tracking from Printify. Register the `order:shipment:created` (and
-// optionally `order:updated`) topic to point here (see /api/setup-webhooks).
-// On delivery, look up the order's shipments and write tracking back onto the
-// matching Supabase order. Best-effort + always 200 so Printify doesn't retry
-// forever on an order we don't recognize.
+// Real-time tracking from Printify. Register `order:shipment:created` and
+// `order:shipment:delivered` to point here (see /api/setup-webhooks).
+//   shipment:created   → write tracking + mark shipped
+//   shipment:delivered → mark delivered
+// Best-effort + always 200 so Printify doesn't retry forever on an order we
+// don't recognize.
 
 export const config = { api: { bodyParser: false } }
 
@@ -27,10 +28,16 @@ export default async function handler(req, res) {
   const printifyOrderId = event?.resource?.id || event?.resource?.data?.id || event?.id
   if (!printifyOrderId || !printifyEnabled()) return res.status(200).json({ received: true, skipped: true })
 
+  // e.g. "order:shipment:delivered" vs "order:shipment:created".
+  const delivered = /deliver/i.test(event?.type || '')
+
   try {
     const tracking = printifyTrackingFrom(await getPrintifyOrder(String(printifyOrderId)))
-    if (!tracking) return res.status(200).json({ received: true, noTracking: true })
-    const result = await saveTrackingByColumn('printify_order_id', String(printifyOrderId), tracking)
+    // A delivered event still advances status even if tracking is unchanged.
+    if (!tracking && !delivered) return res.status(200).json({ received: true, noTracking: true })
+    const result = await saveTrackingByColumn(
+      'printify_order_id', String(printifyOrderId), tracking, delivered ? 'delivered' : 'shipped'
+    )
     return res.status(200).json({ received: true, ...result })
   } catch (err) {
     console.error('Printify webhook error (non-fatal):', err.message)

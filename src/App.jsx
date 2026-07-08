@@ -1971,9 +1971,14 @@ function AdminOrdersPage({ adminPassword }) {
       const res = await fetch('/api/setup-webhooks', { headers: { 'x-admin-key': adminPassword } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Setup failed');
-      const s = data.shopify?.status || 'n/a';
-      const p = data.printify?.status || 'n/a';
-      setSyncMsg(`Real-time tracking — Shopify: ${s}, Printify: ${p}.`);
+      const summarize = (arr) => {
+        if (!Array.isArray(arr) || !arr.length) return 'n/a';
+        const ok = arr.filter(x => x.status === 'registered' || x.status === 'already-registered').length;
+        const err = arr.find(x => x.status === 'error');
+        if (err) return `error (${err.error})`;
+        return `${ok}/${arr.length} topics on`;
+      };
+      setSyncMsg(`Real-time tracking — Shopify: ${summarize(data.shopify)}, Printify: ${summarize(data.printify)}.`);
     } catch (err) {
       setSyncMsg(err.message);
     }

@@ -29,11 +29,15 @@ export function verifyHmac({ raw, signature, secret, encoding = 'hex' }) {
   return a.length === b.length && crypto.timingSafeEqual(a, b)
 }
 
-// Write tracking onto the order matched by `column = value` (e.g.
-// printify_order_id / shopify_order_id). No-ops if already has this tracking.
-// Returns { orderId } on success, or { skipped } / { error }.
-export async function saveTrackingByColumn(column, value, tracking) {
-  if (!value || !tracking?.number) return { skipped: 'missing value or tracking' }
+// Write tracking (and/or advance status) onto the order matched by
+// `column = value` (e.g. printify_order_id / shopify_order_id).
+//   targetStatus 'shipped'   → set shipped if still new/processing
+//   targetStatus 'delivered' → set delivered (carrier confirmed delivery)
+// Never downgrades a delivered/cancelled order. Applies a status change even
+// when the tracking number is unchanged (so a delivery event still lands).
+// Returns { orderId, ...updates } on success, or { skipped } / { error }.
+export async function saveTrackingByColumn(column, value, tracking, targetStatus = 'shipped') {
+  if (!value) return { skipped: 'missing match value' }
   const { data: order, error } = await supabaseAdmin
     .from('orders')
     .select('id, tracking_number, status')
@@ -41,16 +45,22 @@ export async function saveTrackingByColumn(column, value, tracking) {
     .maybeSingle()
   if (error) return { error: error.message }
   if (!order) return { skipped: 'no matching order' }
-  if (order.tracking_number === tracking.number) return { orderId: order.id, unchanged: true }
 
-  const { error: upErr } = await supabaseAdmin
-    .from('orders')
-    .update({
-      tracking_number: tracking.number,
-      tracking_url: tracking.url || null,
-      status: order.status === 'delivered' || order.status === 'cancelled' ? order.status : 'shipped',
-    })
-    .eq('id', order.id)
+  const updates = {}
+  if (tracking?.number && tracking.number !== order.tracking_number) {
+    updates.tracking_number = tracking.number
+    updates.tracking_url = tracking.url || null
+  }
+  // Status progression — never move backward past a delivered/cancelled order.
+  const locked = order.status === 'delivered' || order.status === 'cancelled'
+  if (!locked) {
+    if (targetStatus === 'delivered') updates.status = 'delivered'
+    else if (order.status !== 'shipped') updates.status = 'shipped'
+  }
+
+  if (Object.keys(updates).length === 0) return { orderId: order.id, unchanged: true }
+
+  const { error: upErr } = await supabaseAdmin.from('orders').update(updates).eq('id', order.id)
   if (upErr) return { error: upErr.message }
-  return { orderId: order.id }
+  return { orderId: order.id, ...updates }
 }
