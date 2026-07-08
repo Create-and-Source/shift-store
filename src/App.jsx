@@ -852,8 +852,20 @@ function ProductPage() {
   if (!product) return <div style={{ padding: '200px 40px', textAlign: 'center', color: 'var(--gray)' }}>Product not found</div>;
 
   const currentColor = product.colors[selectedColor] || product.colors[0];
-  const currentImages = currentColor?.images || [];
-  const galleryImages = currentImages.length ? currentImages.map(im => im.url) : [product.image].filter(Boolean);
+  // One unified gallery for the whole product — every colorway's photos +
+  // shared mockups, deduped, in a stable order. Selecting a color never hides
+  // the other mockups; it just jumps the main image to that color's first shot.
+  const galleryImages = (() => {
+    const seen = new Set();
+    const urls = [];
+    for (const c of product.colors) {
+      for (const im of (c?.images || [])) {
+        if (im?.url && !seen.has(im.url)) { seen.add(im.url); urls.push(im.url); }
+      }
+    }
+    if (!urls.length && product.image) urls.push(product.image);
+    return urls;
+  })();
   const activeImage = galleryImages[Math.min(activeImg, galleryImages.length - 1)] || product.image;
   const mainImage = activeImage;
   const selectedSizeObj = product.sizes.find(s => s.name === selectedSize);
@@ -922,7 +934,14 @@ function ProductPage() {
                     key={c.name}
                     className={`color-swatch ${selectedColor === i ? 'active' : ''}`}
                     style={{ background: c.hex }}
-                    onClick={() => { setSelectedColor(i); setActiveImg(0); }}
+                    onClick={() => {
+                      setSelectedColor(i);
+                      // Jump the main image to this color's first photo, but keep
+                      // every thumbnail in the gallery visible.
+                      const firstUrl = (c.images || [])[0]?.url;
+                      const idx = firstUrl ? galleryImages.indexOf(firstUrl) : -1;
+                      setActiveImg(idx >= 0 ? idx : 0);
+                    }}
                   />
                 ))}
               </div>
