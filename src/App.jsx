@@ -2460,8 +2460,12 @@ function AccountPage() {
     setError('');
     setMessage('');
 
+    // Email links must land back on THIS deployment — without this they fall
+    // back to the Supabase project's Site URL (which once pointed at localhost).
+    const emailRedirectTo = `${window.location.origin}/account`;
+
     if (authMode === 'magic') {
-      const { error } = await supabase.auth.signInWithOtp({ email });
+      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo } });
       if (error) setError(error.message);
       else setMessage('Check your email for a login link!');
       return;
@@ -2474,7 +2478,7 @@ function AccountPage() {
     }
 
     if (authMode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
       if (error) setError(error.message);
       else setMessage('Account created! Check your email to confirm.');
     }
