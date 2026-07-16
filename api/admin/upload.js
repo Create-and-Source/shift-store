@@ -6,7 +6,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-const ADMIN_KEY = process.env.ADMIN_KEY || 'shift-admin-2026'
+import { roleFromReq } from '../_lib/adminRole.js'
+
 const BUCKET = 'store-media'
 
 // Admin image upload: accepts a base64 data URL (the client resizes/compresses
@@ -15,7 +16,7 @@ const BUCKET = 'store-media'
 // category. No-ops with a clear error if the bucket doesn't exist yet.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(401).json({ error: 'Unauthorized' })
+  if (!roleFromReq(req)) return res.status(401).json({ error: 'Unauthorized' })
 
   try {
     const { dataUrl, folder = 'uploads', name = 'image' } = req.body || {}

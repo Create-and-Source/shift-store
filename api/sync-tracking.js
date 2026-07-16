@@ -15,12 +15,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-const ADMIN_KEY = process.env.ADMIN_KEY || 'shift-admin-2026'
+import { roleFromReq } from './_lib/adminRole.js'
+
 const CRON_SECRET = process.env.CRON_SECRET
 
 function authorized(req) {
-  // Admin button
-  if (req.headers['x-admin-key'] === ADMIN_KEY) return true
+  // Admin button — owner or staff login both work
+  if (roleFromReq(req)) return true
   // Vercel Cron with a configured secret
   if (CRON_SECRET && req.headers['authorization'] === `Bearer ${CRON_SECRET}`) return true
   // Vercel Cron when no secret is set (Vercel stamps this header on cron calls)

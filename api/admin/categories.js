@@ -5,7 +5,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-const ADMIN_KEY = process.env.ADMIN_KEY || 'shift-admin-2026'
+import { roleFromReq } from '../_lib/adminRole.js'
 
 function slugify(str = '') {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -35,8 +35,8 @@ export default async function handler(req, res) {
     })
   }
 
-  // All mutations require admin
-  if (req.headers['x-admin-key'] !== ADMIN_KEY) {
+  // All mutations require an admin login (owner or staff)
+  if (!roleFromReq(req)) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 

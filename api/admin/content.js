@@ -1,11 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
+import { roleFromReq, getOwnerPrices } from '../_lib/adminRole.js'
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
-
-const ADMIN_KEY = process.env.ADMIN_KEY || 'shift-admin-2026'
 
 // Map a custom_products row into the same shape the storefront uses for feed
 // products (so it merges seamlessly alongside Fulfill Engine / Printify / Shopify).
@@ -49,22 +48,63 @@ export default async function handler(req, res) {
           price: o.price != null ? Number(o.price) : null,
         }
       }
-      return res.status(200).json({
+      const payload = {
         overrides,
         customProducts: (customRows || []).map(mapCustomProduct),
-      })
+      }
+      // The private price layer rides along ONLY for the owner — the public
+      // storefront and staff logins never receive it.
+      if (roleFromReq(req) === 'owner') payload.ownerPrices = await getOwnerPrices()
+      return res.status(200).json(payload)
     } catch (err) {
       // Tables may not exist yet — fail soft so the storefront is unaffected.
       return res.status(200).json({ overrides: {}, customProducts: [], enabled: false })
     }
   }
 
-  // Mutations require admin.
-  if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(401).json({ error: 'Unauthorized' })
+  // Mutations require an admin login (owner or staff).
+  const role = roleFromReq(req)
+  if (!role) return res.status(401).json({ error: 'Unauthorized' })
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const { action } = req.body || {}
   try {
+    // ── Owner-only: the private price layer ──
+    if (action === 'setOwnerPrice' || action === 'bulkSetOwnerPrices') {
+      if (role !== 'owner') return res.status(403).json({ error: 'Not allowed' })
+    }
+
+    if (action === 'setOwnerPrice') {
+      const { productId, price } = req.body
+      if (!productId) return res.status(400).json({ error: 'productId required' })
+      if (price === '' || price == null) {
+        const { error } = await supabase.from('owner_prices').delete().eq('product_id', productId)
+        if (error) return res.status(500).json({ error: error.message })
+        return res.status(200).json({ ok: true })
+      }
+      const p = Number(price)
+      if (isNaN(p) || p < 0) return res.status(400).json({ error: 'Invalid price' })
+      const { error } = await supabase.from('owner_prices').upsert(
+        { product_id: productId, price: p, updated_at: new Date().toISOString() },
+        { onConflict: 'product_id' }
+      )
+      if (error) return res.status(500).json({ error: error.message })
+      return res.status(200).json({ ok: true })
+    }
+
+    if (action === 'bulkSetOwnerPrices') {
+      const { prices } = req.body
+      const entries = Object.entries(prices || {})
+        .map(([id, p]) => [id, Number(p)])
+        .filter(([id, p]) => id && !isNaN(p) && p >= 0)
+      if (!entries.length) return res.status(400).json({ error: 'No valid prices given' })
+      const now = new Date().toISOString()
+      const rows = entries.map(([id, p]) => ({ product_id: id, price: p, updated_at: now }))
+      const { error } = await supabase.from('owner_prices').upsert(rows, { onConflict: 'product_id' })
+      if (error) return res.status(500).json({ error: error.message })
+      return res.status(200).json({ ok: true, count: rows.length })
+    }
+
     if (action === 'setOverride') {
       const { productId, imageUrls, name, price } = req.body
       if (!productId) return res.status(400).json({ error: 'productId required' })

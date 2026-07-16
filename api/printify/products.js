@@ -1,4 +1,5 @@
 import { printifyEnabled, listPrintifyProducts, mapPrintifyProduct } from '../_lib/printify.js'
+import { maskCosts } from '../_lib/adminRole.js'
 
 // Public storefront endpoint: returns the Printify catalog mapped into the
 // same product shape the UI uses for Fulfill Engine products. Always returns
@@ -20,7 +21,7 @@ export default async function handler(req, res) {
       .filter(p => p.visible !== false)
       .map(mapPrintifyProduct)
       .filter(p => p.sizes.length > 0 || p.colors.length > 0)
-    return res.status(200).json({ products, enabled: true })
+    return res.status(200).json({ products: await maskCosts(products, req), enabled: true })
   } catch (err) {
     console.error('Printify products error:', err.status, err.message)
     return res.status(200).json({ products: [], enabled: true, error: err.message })

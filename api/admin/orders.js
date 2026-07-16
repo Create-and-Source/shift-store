@@ -5,11 +5,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-const ADMIN_KEY = process.env.ADMIN_KEY || 'shift-admin-2026'
+import { roleFromReq } from '../_lib/adminRole.js'
 
 export default async function handler(req, res) {
-  // Simple admin auth via header
-  if (req.headers['x-admin-key'] !== ADMIN_KEY) {
+  // Admin auth via header — owner or staff login both work here.
+  if (!roleFromReq(req)) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 

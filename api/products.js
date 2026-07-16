@@ -1,4 +1,6 @@
 // Fetch products from Fulfill Engine public storefront API
+import { maskCosts } from './_lib/adminRole.js'
+
 const FE_STORE_SLUG = 'shift'
 
 export default async function handler(req, res) {
@@ -55,7 +57,7 @@ export default async function handler(req, res) {
       }
     })
 
-    return res.status(200).json({ products, categories })
+    return res.status(200).json({ products: await maskCosts(products, req), categories })
   } catch (err) {
     console.error('Products fetch error:', err)
     return res.status(500).json({ error: 'Failed to fetch products' })

@@ -1,4 +1,5 @@
 import { shopifyEnabled, listShopifyProducts, mapShopifyProduct } from '../_lib/shopify.js'
+import { maskCosts } from '../_lib/adminRole.js'
 
 // Storefront endpoint: returns the Shopify catalog mapped into the same
 // product shape the UI uses for Fulfill Engine + Printify products. Always
@@ -17,7 +18,7 @@ export default async function handler(req, res) {
   try {
     const raw = await listShopifyProducts()
     const products = raw.map(mapShopifyProduct)
-    return res.status(200).json({ products, enabled: true })
+    return res.status(200).json({ products: await maskCosts(products, req), enabled: true })
   } catch (err) {
     console.error('Shopify products error:', err.status, err.message)
     return res.status(200).json({ products: [], enabled: true, error: err.message })

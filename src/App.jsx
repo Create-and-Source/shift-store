@@ -1291,6 +1291,7 @@ function OrderSuccessPage() {
 function AdminPage() {
   const [authed, setAuthed] = useState(() => !!sessionStorage.getItem('shift-admin-pw'));
   const [adminPassword, setAdminPassword] = useState(() => sessionStorage.getItem('shift-admin-pw') || '');
+  const [role, setRole] = useState(() => sessionStorage.getItem('shift-admin-role') || '');
   const [draftPassword, setDraftPassword] = useState('');
   const [status, setStatus] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
@@ -1300,11 +1301,14 @@ function AdminPage() {
     setStatus('');
     setLoggingIn(true);
     try {
-      const res = await fetch('/api/admin/orders?status=all', {
+      const res = await fetch('/api/admin/whoami', {
         headers: { 'x-admin-key': draftPassword },
       });
-      if (!res.ok) throw new Error('Invalid password');
+      const data = res.ok ? await res.json().catch(() => null) : null;
+      if (!data?.role) throw new Error('Invalid password');
       sessionStorage.setItem('shift-admin-pw', draftPassword);
+      sessionStorage.setItem('shift-admin-role', data.role);
+      setRole(data.role);
       setAdminPassword(draftPassword);
       setAuthed(true);
     } catch (err) {
@@ -1313,6 +1317,19 @@ function AdminPage() {
       setLoggingIn(false);
     }
   };
+
+  // Sessions from before roles existed have a stored password but no role.
+  useEffect(() => {
+    if (!authed || role) return;
+    fetch('/api/admin/whoami', { headers: { 'x-admin-key': adminPassword } })
+      .then(r => (r.ok ? r.json() : { role: 'owner' }))
+      .then(d => {
+        const resolved = d?.role || 'owner';
+        sessionStorage.setItem('shift-admin-role', resolved);
+        setRole(resolved);
+      })
+      .catch(() => setRole('owner'));
+  }, [authed, role, adminPassword]);
 
   if (!authed) {
     return (
@@ -1333,18 +1350,25 @@ function AdminPage() {
     );
   }
 
-  return <AdminDashboard adminPassword={adminPassword} />;
+  return <AdminDashboard adminPassword={adminPassword} role={role || 'owner'} />;
 }
 
 /* ═══ ADMIN PRODUCTS / CATEGORIES ═══ */
 
-function AdminProductsPage({ adminPassword }) {
+function AdminProductsPage({ adminPassword, role }) {
+  // Two views of the same screen:
+  //   owner — product.price is the TRUE source cost; the price field edits her
+  //           private layer (owner_prices), which everyone else sees as "cost".
+  //   staff — product.price arrives pre-masked by the API (owner price when
+  //           set); the price field edits the store's retail (product_overrides).
+  const isOwner = role === 'owner';
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [hiddenProductIds, setHiddenProductIds] = useState([]);
-  const [overrides, setOverrides] = useState({});      // productId -> { image_urls, name, price }
-  const [priceDrafts, setPriceDrafts] = useState({});  // productId -> string (her sell price)
+  const [overrides, setOverrides] = useState({});      // productId -> { image_urls, name, price } (retail layer)
+  const [ownerPrices, setOwnerPrices] = useState({});  // productId -> number (owner's private layer)
+  const [priceDrafts, setPriceDrafts] = useState({});  // productId -> string (the editable price for this role)
   const [savingId, setSavingId] = useState(null);
   const [bulkAmount, setBulkAmount] = useState('');    // bulk markup amount (string)
   const [bulkMode, setBulkMode] = useState('pct');     // pct = % over cost, usd = $ over cost
@@ -1397,12 +1421,15 @@ function AdminProductsPage({ adminPassword }) {
   const loadData = async (selectId) => {
     setLoading(true);
     try {
+      // The admin key rides along so each role sees its own version of "cost":
+      // owner gets true source costs, staff gets the owner-priced feed.
+      const authHeaders = { headers: { 'x-admin-key': adminPassword } };
       const [prodRes, catRes, pfRes, shRes, contentRes] = await Promise.all([
-        fetch('/api/products'),
+        fetch('/api/products', authHeaders),
         fetch('/api/admin/categories'),
-        fetch('/api/printify/products').catch(() => null),
-        fetch('/api/shopify/products').catch(() => null),
-        fetch('/api/admin/content').catch(() => null),
+        fetch('/api/printify/products', authHeaders).catch(() => null),
+        fetch('/api/shopify/products', authHeaders).catch(() => null),
+        fetch('/api/admin/content', authHeaders).catch(() => null),
       ]);
       const prodData = await prodRes.json();
       const catData = await catRes.json();
@@ -1418,12 +1445,21 @@ function AdminProductsPage({ adminPassword }) {
       setCategories(catData.categories || []);
       setAssignments(catData.assignments || []);
       setHiddenProductIds(catData.hiddenProductIds || []);
-      // Sell-price overrides — seed the editable price fields (blank = sells at cost).
+      // Seed the editable price fields (blank = passes through at cost):
+      // owner edits her private layer, staff edits the store retail.
       const ov = contentData.overrides || {};
+      const op = contentData.ownerPrices || {};
       setOverrides(ov);
+      setOwnerPrices(op);
       const drafts = {};
-      for (const [pid, o] of Object.entries(ov)) {
-        if (o.price != null) drafts[pid] = String(o.price);
+      if (isOwner) {
+        for (const [pid, price] of Object.entries(op)) {
+          if (price != null) drafts[pid] = String(price);
+        }
+      } else {
+        for (const [pid, o] of Object.entries(ov)) {
+          if (o.price != null) drafts[pid] = String(o.price);
+        }
       }
       setPriceDrafts(drafts);
       if (selectId) {
@@ -1461,10 +1497,35 @@ function AdminProductsPage({ adminPassword }) {
     return data;
   };
 
-  // Save (or clear) the sell price for one product. Blank = revert to cost.
-  // Preserves any existing photo/name override on the same product.
+  // Save (or clear) the price for one product. Blank = revert to cost.
+  // Owner writes her private layer; staff writes the store retail
+  // (preserving any photo/name override on the same product).
   const savePrice = async (product) => {
     const raw = (priceDrafts[product.id] ?? '').trim();
+    if (isOwner) {
+      const prevOwner = ownerPrices[product.id] != null ? String(ownerPrices[product.id]) : '';
+      if (raw === prevOwner) return; // unchanged — no write
+      let price = null;
+      if (raw !== '') {
+        price = Number(raw);
+        if (isNaN(price) || price < 0) { setStatusMsg('Enter a valid price'); return; }
+      }
+      setSavingId(product.id);
+      try {
+        await contentFetch('setOwnerPrice', { productId: product.id, price });
+        setOwnerPrices(o => {
+          const n = { ...o };
+          if (price == null) delete n[product.id];
+          else n[product.id] = price;
+          return n;
+        });
+        setStatusMsg(price == null ? `Reset to cost: ${product.name}` : `Your price saved: ${product.name} → $${price.toFixed(2)}`);
+      } catch (err) {
+        setStatusMsg(err.message);
+      }
+      setSavingId(null);
+      return;
+    }
     const cur = overrides[product.id] || {};
     const prev = cur.price != null ? String(cur.price) : '';
     if (raw === prev) return; // unchanged — no write
@@ -1496,8 +1557,10 @@ function AdminProductsPage({ adminPassword }) {
   };
 
   // ── Bulk pricing: cost + markup across many products in one click ──
-  const bulkTargets = products.filter(p => bulkScope === 'all' || overrides[p.id]?.price == null);
-  const unpricedCount = products.filter(p => overrides[p.id]?.price == null).length;
+  // "Priced" means priced in THIS role's layer.
+  const hasPrice = (pid) => (isOwner ? ownerPrices[pid] != null : overrides[pid]?.price != null);
+  const bulkTargets = products.filter(p => bulkScope === 'all' || !hasPrice(p.id));
+  const unpricedCount = products.filter(p => !hasPrice(p.id)).length;
 
   const computeBulkPrice = (cost) => {
     const amt = Number(bulkAmount);
@@ -1518,7 +1581,7 @@ function AdminProductsPage({ adminPassword }) {
     try {
       const prices = {};
       for (const p of bulkTargets) prices[p.id] = computeBulkPrice(p.price);
-      const data = await contentFetch('bulkSetPrices', { prices });
+      const data = await contentFetch(isOwner ? 'bulkSetOwnerPrices' : 'bulkSetPrices', { prices });
       await loadData(selectedCategoryId);
       setStatusMsg(`Priced ${data.count} products at ${label}`);
     } catch (err) {
@@ -1645,7 +1708,11 @@ function AdminProductsPage({ adminPassword }) {
         <div className="admin-bulk-price">
           <div className="admin-bulk-price-head">
             <label>Bulk pricing</label>
-            <small>Cost + your markup = your price, across many products at once. Unpriced products sell at cost.</small>
+            <small>
+              {isOwner
+                ? 'Cost + your markup = your price. The rest of the admin — and the store — sees your price as the product cost.'
+                : 'Cost + your markup = the store’s retail price, across many products at once. Unpriced products sell at cost.'}
+            </small>
           </div>
           <div className="admin-bulk-price-row">
             <input
@@ -1740,6 +1807,19 @@ function AdminProductsPage({ adminPassword }) {
                     if (profit > 0) return <small className="admin-price-earn">You earn ${profit.toFixed(2)} · {margin}%</small>;
                     if (profit < 0) return <small className="admin-price-earn neg">Below cost −${Math.abs(profit).toFixed(2)}</small>;
                     return <small className="admin-price-earn flat">At cost — $0 profit</small>;
+                  })()}
+                  {isOwner && (() => {
+                    const retail = overrides[product.id]?.price;
+                    const mine = ownerPrices[product.id];
+                    const storePrice = retail ?? mine ?? product.price;
+                    return (
+                      <small className="admin-price-retail">
+                        Store: ${Number(storePrice).toFixed(2)}
+                        {retail != null
+                          ? ` · her cut $${(retail - (mine ?? product.price)).toFixed(2)}`
+                          : ' (no retail yet)'}
+                      </small>
+                    );
                   })()}
                 </div>
                 <button className="admin-cat-hide-btn" onClick={() => toggleHidden(product.id, !isHidden)}>
@@ -1986,13 +2066,14 @@ function AdminMediaPage({ adminPassword }) {
   );
 }
 
-function AdminDashboard({ adminPassword }) {
+function AdminDashboard({ adminPassword, role }) {
   const [adminPage, setAdminPage] = useState('orders');
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
 
   const logout = () => {
     sessionStorage.removeItem('shift-admin-pw');
+    sessionStorage.removeItem('shift-admin-role');
     navigate('/');
     window.location.reload();
   };
@@ -2026,14 +2107,14 @@ function AdminDashboard({ adminPassword }) {
         </div>
       )}
 
-      {adminPage === 'orders' && <AdminOrdersPage adminPassword={adminPassword} />}
-      {adminPage === 'products' && <AdminProductsPage adminPassword={adminPassword} />}
+      {adminPage === 'orders' && <AdminOrdersPage adminPassword={adminPassword} role={role} />}
+      {adminPage === 'products' && <AdminProductsPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'media' && <AdminMediaPage adminPassword={adminPassword} />}
     </div>
   );
 }
 
-function AdminOrdersPage({ adminPassword }) {
+function AdminOrdersPage({ adminPassword, role }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -2129,10 +2210,12 @@ function AdminOrdersPage({ adminPassword }) {
             {s === 'all' ? 'All Orders' : s.charAt(0).toUpperCase() + s.slice(1)}
           </button>
         ))}
-        <button className="filter-btn sync-btn" onClick={setupWebhooks} disabled={syncing} style={{ marginLeft: 'auto' }} title="One-time: turn on real-time tracking updates">
-          Enable real-time
-        </button>
-        <button className="filter-btn sync-btn" onClick={syncTracking} disabled={syncing}>
+        {role === 'owner' && (
+          <button className="filter-btn sync-btn" onClick={setupWebhooks} disabled={syncing} style={{ marginLeft: 'auto' }} title="One-time: turn on real-time tracking updates">
+            Enable real-time
+          </button>
+        )}
+        <button className="filter-btn sync-btn" onClick={syncTracking} disabled={syncing} style={role === 'owner' ? undefined : { marginLeft: 'auto' }}>
           {syncing ? <><Loader size={12} className="spin" /> Syncing…</> : <><Truck size={12} /> Sync tracking</>}
         </button>
       </div>
