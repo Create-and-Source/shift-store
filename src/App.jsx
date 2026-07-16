@@ -721,7 +721,7 @@ function HomePage() {
       </section>
 
 
-      {/* NEWSLETTER */}
+      {/* NEWSLETTER — emails land in the admin Subscribers page */}
       <section className="newsletter">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -732,10 +732,7 @@ function HomePage() {
           <div className="newsletter-label">Stay Locked In</div>
           <h3 className="newsletter-title"><GlitchText>Join the Movement</GlitchText></h3>
           <p className="newsletter-sub">Early access to drops, exclusive colorways, and first dibs on limited editions.</p>
-          <form className="newsletter-form" onSubmit={e => e.preventDefault()}>
-            <input type="email" placeholder="Your email" />
-            <button type="submit">Subscribe</button>
-          </form>
+          <NewsletterForm />
         </motion.div>
       </section>
     </>
@@ -1352,6 +1349,53 @@ function AdminPage() {
   }
 
   return <AdminDashboard adminPassword={adminPassword} role={role || 'owner'} />;
+}
+
+// Storefront newsletter signup — saves to the subscribers table via /api/subscribe.
+function NewsletterForm() {
+  const [email, setEmail] = useState('');
+  const [state, setState] = useState('idle'); // idle | sending | done | error
+  const [msg, setMsg] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (state === 'sending') return;
+    setState('sending');
+    setMsg('');
+    try {
+      const res = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Something went wrong — try again');
+      setState('done');
+      setMsg("You're in. Watch your inbox for the next drop.");
+      setEmail('');
+    } catch (err) {
+      setState('error');
+      setMsg(err.message);
+    }
+  };
+
+  return (
+    <>
+      <form className="newsletter-form" onSubmit={submit}>
+        <input
+          type="email"
+          placeholder="Your email"
+          value={email}
+          required
+          onChange={e => setEmail(e.target.value)}
+        />
+        <button type="submit" disabled={state === 'sending'}>
+          {state === 'sending' ? 'Joining…' : 'Subscribe'}
+        </button>
+      </form>
+      {msg && <p className={`newsletter-msg ${state === 'error' ? 'err' : ''}`}>{msg}</p>}
+    </>
+  );
 }
 
 /* ═══ ADMIN PRODUCTS / CATEGORIES ═══ */
@@ -2244,6 +2288,7 @@ function AdminDashboard({ adminPassword, role }) {
             <button className={adminPage === 'products' ? 'active' : ''} onClick={() => { setAdminPage('products'); setMenuOpen(false); }}>Products</button>
             <button className={adminPage === 'media' ? 'active' : ''} onClick={() => { setAdminPage('media'); setMenuOpen(false); }}>Media</button>
             <button className={adminPage === 'orders' ? 'active' : ''} onClick={() => { setAdminPage('orders'); setMenuOpen(false); }}>Orders</button>
+            <button className={adminPage === 'subscribers' ? 'active' : ''} onClick={() => { setAdminPage('subscribers'); setMenuOpen(false); }}>Subscribers</button>
           </nav>
         </div>
       )}
@@ -2251,6 +2296,55 @@ function AdminDashboard({ adminPassword, role }) {
       {adminPage === 'orders' && <AdminOrdersPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'products' && <AdminProductsPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'media' && <AdminMediaPage adminPassword={adminPassword} />}
+      {adminPage === 'subscribers' && <AdminSubscribersPage adminPassword={adminPassword} />}
+    </div>
+  );
+}
+
+// Newsletter signups from the storefront "Join the Movement" form.
+function AdminSubscribersPage({ adminPassword }) {
+  const [subs, setSubs] = useState(null);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetch('/api/subscribe', { headers: { 'x-admin-key': adminPassword } })
+      .then(r => r.json())
+      .then(d => setSubs(d.subscribers || []))
+      .catch(() => setSubs([]));
+  }, []);
+
+  const copyAll = async () => {
+    try {
+      await navigator.clipboard.writeText((subs || []).map(s => s.email).join('\n'));
+      setMsg(`Copied ${subs.length} email${subs.length === 1 ? '' : 's'}`);
+    } catch {
+      setMsg('Copy failed — select them manually');
+    }
+  };
+
+  if (subs == null) return <div style={{ textAlign: 'center', padding: 60 }}><Loader size={24} className="spin" /></div>;
+
+  return (
+    <div className="admin-subs">
+      <div className="admin-subs-head">
+        <div>
+          <h2>Subscribers</h2>
+          <p>{subs.length} signed up for drops{msg ? ` · ${msg}` : ''}</p>
+        </div>
+        {subs.length > 0 && <button onClick={copyAll}>Copy all emails</button>}
+      </div>
+      {subs.length === 0 ? (
+        <div className="admin-subs-empty">No subscribers yet — signups from the “Join the Movement” form land here.</div>
+      ) : (
+        <div className="admin-subs-list">
+          {subs.map(s => (
+            <div key={s.email} className="admin-subs-row">
+              <span>{s.email}</span>
+              <small>{new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</small>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
