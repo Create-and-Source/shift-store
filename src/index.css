@@ -2598,6 +2598,9 @@ img { max-width: 100%; display: block; }
   font-size: 11px;
   color: #999;
   white-space: nowrap;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .admin-cat-hide-btn {
   padding: 6px 12px;
@@ -2630,8 +2633,22 @@ img { max-width: 100%; display: block; }
     grid-template-columns: 24px 40px 1fr auto;
     padding: 10px 16px;
   }
+  /* Price controls get their own full-width row on phones — in the side
+     column they forced the whole row wider than the screen. */
+  .admin-price-cell {
+    grid-column: 1 / -1;
+    justify-items: start;
+    white-space: normal;
+  }
+  .admin-price-cell .admin-price-earn,
+  .admin-price-cell .admin-price-retail {
+    white-space: normal;
+    max-width: none;
+  }
   .admin-cat-hide-btn {
-    display: none;
+    grid-row: 1;
+    grid-column: 4;
+    padding: 6px 10px;
   }
   .admin-cat-head {
     padding: 16px;
