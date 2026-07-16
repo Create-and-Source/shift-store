@@ -2262,6 +2262,67 @@ function AdminOrdersPage({ adminPassword, role }) {
   const [selected, setSelected] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
+  const [costMap, setCostMap] = useState(null);        // productId -> this role's cost basis
+  const [ownerPrices, setOwnerPrices] = useState({});  // owner layer (owner login only)
+
+  // Cost basis for profit math — the feeds answer per-role (owner: true cost,
+  // staff: the owner's price), so the same view shows each her own profit.
+  useEffect(() => {
+    (async () => {
+      try {
+        const h = { headers: { 'x-admin-key': adminPassword } };
+        const [a, b, c, content] = await Promise.all([
+          fetch('/api/products', h).then(r => r.json()).catch(() => ({})),
+          fetch('/api/printify/products', h).then(r => r.json()).catch(() => ({})),
+          fetch('/api/shopify/products', h).then(r => r.json()).catch(() => ({})),
+          fetch('/api/admin/content', h).then(r => r.json()).catch(() => ({})),
+        ]);
+        const m = {};
+        for (const p of [...(a.products || []), ...(b.products || []), ...(c.products || [])]) m[p.id] = p.price;
+        setCostMap(m);
+        setOwnerPrices(content.ownerPrices || {});
+      } catch {
+        setCostMap({});
+      }
+    })();
+  }, []);
+
+  // What this login earns on one order item. Staff: retail − her cost.
+  // Owner: her private price − true cost (the partner's cut is hers to keep).
+  const itemEarn = (it) => {
+    if (!costMap) return null;
+    const cost = costMap[it.product_id];
+    if (cost == null) return null;
+    const qty = it.quantity || 1;
+    if (role === 'owner') {
+      const mine = ownerPrices[it.product_id];
+      return (Number(mine ?? cost) - cost) * qty;
+    }
+    return (Number(it.unit_price) - cost) * qty;
+  };
+
+  const orderEarn = (order) => {
+    const items = order.items || [];
+    if (!items.length) return null;
+    let sum = 0, any = false;
+    for (const it of items) {
+      const e = itemEarn(it);
+      if (e != null) { sum += e; any = true; }
+    }
+    return any ? sum : null;
+  };
+
+  const profitTotals = (() => {
+    if (!costMap || !orders.length) return null;
+    let revenue = 0, earn = 0, counted = 0;
+    for (const o of orders) {
+      if (o.status === 'cancelled') continue;
+      revenue += Number(o.subtotal ?? o.total) || 0;
+      const e = orderEarn(o);
+      if (e != null) { earn += e; counted++; }
+    }
+    return { revenue, earn, counted, total: orders.filter(o => o.status !== 'cancelled').length };
+  })();
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -2362,6 +2423,23 @@ function AdminOrdersPage({ adminPassword, role }) {
       </div>
       {syncMsg && <div style={{ padding: '0 24px 8px', fontSize: 12, color: 'var(--gray)' }}>{syncMsg}</div>}
 
+      {profitTotals && (
+        <div className="admin-profit-strip">
+          <div>
+            <small>Sales</small>
+            <strong>${profitTotals.revenue.toFixed(2)}</strong>
+          </div>
+          <div>
+            <small>You earn</small>
+            <strong className="earn">${profitTotals.earn.toFixed(2)}</strong>
+          </div>
+          <span className="admin-profit-note">
+            {filter === 'all' ? 'All orders' : `${filter} orders`} · based on current costs
+            {profitTotals.counted < profitTotals.total ? ` · ${profitTotals.total - profitTotals.counted} order(s) not counted (product no longer in the catalog)` : ''}
+          </span>
+        </div>
+      )}
+
       <div className="admin-content">
         <div className="admin-orders-list">
           {loading ? (
@@ -2388,6 +2466,11 @@ function AdminOrdersPage({ adminPassword, role }) {
                   <span style={{ color: 'var(--gray)' }}>{new Date(order.created_at).toLocaleDateString()}</span>
                   <span style={{ fontWeight: 600 }}>${Number(order.total).toFixed(2)}</span>
                 </div>
+                {(() => {
+                  const e = orderEarn(order);
+                  if (e == null || order.status === 'cancelled') return null;
+                  return <div className="admin-order-earn">You earn ${e.toFixed(2)}</div>;
+                })()}
               </div>
             ))
           )}

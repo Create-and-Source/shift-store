@@ -2481,6 +2481,43 @@ img { max-width: 100%; display: block; }
   padding: 10px 24px;
   border-bottom: 1px solid #e0e0e0;
 }
+.admin-profit-strip {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 12px 24px;
+  background: #fafafa;
+  border-bottom: 1px solid #e0e0e0;
+  flex-wrap: wrap;
+}
+.admin-profit-strip > div {
+  display: grid;
+  gap: 2px;
+}
+.admin-profit-strip small {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #999;
+}
+.admin-profit-strip strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: #111;
+}
+.admin-profit-strip strong.earn { color: #1f9d55; }
+.admin-profit-note {
+  font-size: 11px;
+  color: #aaa;
+  margin-left: auto;
+}
+.admin-order-earn {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1f9d55;
+}
 .admin-desc-btn.has-desc {
   border-color: var(--red);
   color: var(--red);
