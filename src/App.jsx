@@ -2289,6 +2289,7 @@ function AdminDashboard({ adminPassword, role }) {
             <button className={adminPage === 'media' ? 'active' : ''} onClick={() => { setAdminPage('media'); setMenuOpen(false); }}>Media</button>
             <button className={adminPage === 'orders' ? 'active' : ''} onClick={() => { setAdminPage('orders'); setMenuOpen(false); }}>Orders</button>
             <button className={adminPage === 'subscribers' ? 'active' : ''} onClick={() => { setAdminPage('subscribers'); setMenuOpen(false); }}>Subscribers</button>
+            <button className={adminPage === 'atcost' ? 'active' : ''} onClick={() => { setAdminPage('atcost'); setMenuOpen(false); }}>Order at Cost</button>
           </nav>
         </div>
       )}
@@ -2297,6 +2298,156 @@ function AdminDashboard({ adminPassword, role }) {
       {adminPage === 'products' && <AdminProductsPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'media' && <AdminMediaPage adminPassword={adminPassword} />}
       {adminPage === 'subscribers' && <AdminSubscribersPage adminPassword={adminPassword} />}
+      {adminPage === 'atcost' && <AdminOrderAtCostPage adminPassword={adminPassword} />}
+    </div>
+  );
+}
+
+// Wholesale ordering: buy any product at this login's cost — staff pays her
+// cost, owner pays true cost. Runs through the normal Stripe checkout, so
+// orders record + auto-fulfill (Printify/Shopify) exactly like retail ones.
+function AdminOrderAtCostPage({ adminPassword }) {
+  const [products, setProducts] = useState(null);
+  const [cart, setCart] = useState([]);
+  const [sel, setSel] = useState({});    // productId -> { color, size }
+  const [query, setQuery] = useState('');
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const h = { headers: { 'x-admin-key': adminPassword } };
+        const [a, b, c] = await Promise.all([
+          fetch('/api/products', h).then(r => r.json()).catch(() => ({})),
+          fetch('/api/printify/products', h).then(r => r.json()).catch(() => ({})),
+          fetch('/api/shopify/products', h).then(r => r.json()).catch(() => ({})),
+        ]);
+        setProducts([...(a.products || []), ...(b.products || []), ...(c.products || [])]);
+      } catch {
+        setProducts([]);
+      }
+    })();
+  }, []);
+
+  const addItem = (p) => {
+    const chosen = sel[p.id] || {};
+    const color = chosen.color || p.colors?.[0]?.name || '';
+    const sizeObj = p.sizes?.length ? (p.sizes.find(s => s.name === chosen.size) || p.sizes[0]) : null;
+    const size = sizeObj?.name || '';
+    const price = p.price + (sizeObj?.surcharge || 0);
+    const key = `${p.id}-${color}-${size}`;
+    const printifyVariantId = p.variantMap?.[`${color}|${size}`] ?? null;
+    setCart(prev => {
+      const ex = prev.find(i => i.key === key);
+      if (ex) return prev.map(i => (i.key === key ? { ...i, qty: i.qty + 1 } : i));
+      return [...prev, { key, product: p, color, size, qty: 1, price, printifyVariantId }];
+    });
+  };
+
+  const bumpQty = (key, delta) => {
+    setCart(prev => prev
+      .map(i => (i.key === key ? { ...i, qty: Math.max(0, i.qty + delta) } : i))
+      .filter(i => i.qty > 0));
+  };
+
+  const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+
+  const checkout = async () => {
+    if (!cart.length || checkingOut) return;
+    setCheckingOut(true);
+    setMsg('');
+    try {
+      const res = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: cart.map(i => ({
+            productId: i.product.id,
+            name: i.product.name,
+            price: i.price,
+            qty: i.qty,
+            color: i.color,
+            size: i.size,
+            image: i.product.image,
+            source: i.product.source || 'static',
+            printifyProductId: i.product.printifyProductId || '',
+            printifyVariantId: i.printifyVariantId || 0,
+          })),
+          shipping: 10,
+        }),
+      });
+      const data = await res.json();
+      if (!data.url) throw new Error(data.error || 'Checkout failed');
+      window.location.href = data.url;
+    } catch (err) {
+      setMsg(err.message);
+      setCheckingOut(false);
+    }
+  };
+
+  if (products == null) return <div style={{ textAlign: 'center', padding: 60 }}><Loader size={24} className="spin" /></div>;
+
+  const visible = products.filter(p => !query || p.name.toLowerCase().includes(query.toLowerCase()));
+
+  return (
+    <div className="admin-atcost">
+      <div className="admin-atcost-head">
+        <div>
+          <h2>Order at Cost</h2>
+          <p>Buy anything at your cost — samples, stock, gifts. Ships like a normal order; shipping is added at checkout.</p>
+        </div>
+      </div>
+
+      {cart.length > 0 && (
+        <div className="admin-atcost-cart">
+          {cart.map(i => (
+            <div key={i.key} className="admin-atcost-cart-row">
+              <span className="admin-atcost-cart-name">{i.product.name} <small>{[i.color, i.size].filter(Boolean).join(' / ')}</small></span>
+              <span className="admin-atcost-qty">
+                <button onClick={() => bumpQty(i.key, -1)}>−</button>
+                {i.qty}
+                <button onClick={() => bumpQty(i.key, 1)}>+</button>
+              </span>
+              <span className="admin-atcost-line">${(i.price * i.qty).toFixed(2)}</span>
+            </div>
+          ))}
+          <div className="admin-atcost-checkout">
+            <span>Total <strong>${total.toFixed(2)}</strong> <small>+ shipping</small></span>
+            <button onClick={checkout} disabled={checkingOut}>
+              {checkingOut ? 'Opening checkout…' : 'Checkout'}
+            </button>
+          </div>
+          {msg && <p className="admin-atcost-err">{msg}</p>}
+        </div>
+      )}
+
+      <input className="admin-media-search" placeholder="Search products…" value={query} onChange={e => setQuery(e.target.value)} />
+      <div className="admin-atcost-list">
+        {visible.map(p => {
+          const chosen = sel[p.id] || {};
+          return (
+            <div key={p.id} className="admin-atcost-row">
+              <img src={p.image} alt="" />
+              <div className="admin-atcost-info">
+                <strong>{p.name}</strong>
+                <small>Cost ${p.price.toFixed(2)}</small>
+              </div>
+              {(p.colors?.length || 0) > 1 && (
+                <select value={chosen.color || p.colors[0].name} onChange={e => setSel(s => ({ ...s, [p.id]: { ...s[p.id], color: e.target.value } }))}>
+                  {p.colors.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                </select>
+              )}
+              {(p.sizes?.length || 0) > 0 && (
+                <select value={chosen.size || p.sizes[0].name} onChange={e => setSel(s => ({ ...s, [p.id]: { ...s[p.id], size: e.target.value } }))}>
+                  {p.sizes.map(s => <option key={s.name} value={s.name}>{s.name}{s.surcharge ? ` (+$${s.surcharge.toFixed(2)})` : ''}</option>)}
+                </select>
+              )}
+              <button className="admin-atcost-add" onClick={() => addItem(p)}>Add</button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
