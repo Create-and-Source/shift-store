@@ -46,6 +46,15 @@ async function getOrCreateCustomer(email, name) {
     password: tempPassword,
     email_confirm: true,
   })
+  let authId = authUser?.user?.id || null
+
+  // Buyer may have signed up through the portal BEFORE their first purchase —
+  // createUser fails on the existing email, so find that account and link it,
+  // or their orders would never show up in the portal.
+  if (!authId) {
+    const { data: list } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
+    authId = (list?.users || []).find(u => (u.email || '').toLowerCase() === email.toLowerCase())?.id || null
+  }
 
   // Create customer record
   const { data: customer, error } = await supabase
@@ -53,7 +62,7 @@ async function getOrCreateCustomer(email, name) {
     .insert({
       email,
       name: name || '',
-      auth_id: authUser?.user?.id || null,
+      auth_id: authId,
     })
     .select('id')
     .single()
