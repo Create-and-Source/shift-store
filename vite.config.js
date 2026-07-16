@@ -7,6 +7,9 @@ const stamp = Date.now().toString(36)
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __BUILD_STAMP__: JSON.stringify(stamp),
+  },
   build: {
     rollupOptions: {
       output: {

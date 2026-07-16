@@ -1377,6 +1377,7 @@ function AdminProductsPage({ adminPassword, role }) {
   const [bulkScope, setBulkScope] = useState('unpriced'); // unpriced | all
   const [bulkNice99, setBulkNice99] = useState(false); // round up so prices end in .99
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set()); // ticked products for bulk pricing
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categoryNameDraft, setCategoryNameDraft] = useState('');
@@ -1589,10 +1590,23 @@ function AdminProductsPage({ adminPassword, role }) {
   };
 
   // ── Bulk pricing: cost + markup across many products in one click ──
-  // "Priced" means priced in THIS role's layer.
+  // "Priced" means priced in THIS role's layer. Ticking product checkboxes
+  // (when no category is selected) narrows the bulk apply to just those.
   const hasPrice = (pid) => (isOwner ? ownerPrices[pid] != null : overrides[pid]?.price != null);
-  const bulkTargets = products.filter(p => bulkScope === 'all' || !hasPrice(p.id));
+  const pickingForBulk = !selectedCategoryId && selectedIds.size > 0;
+  const bulkTargets = pickingForBulk
+    ? products.filter(p => selectedIds.has(p.id))
+    : products.filter(p => bulkScope === 'all' || !hasPrice(p.id));
   const unpricedCount = products.filter(p => !hasPrice(p.id)).length;
+
+  const toggleSelected = (productId, checked) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(productId);
+      else next.delete(productId);
+      return next;
+    });
+  };
 
   const computeBulkPrice = (cost) => {
     const amt = Number(bulkAmount);
@@ -1614,6 +1628,7 @@ function AdminProductsPage({ adminPassword, role }) {
       const prices = {};
       for (const p of bulkTargets) prices[p.id] = computeBulkPrice(p.price);
       const data = await contentFetch(isOwner ? 'bulkSetOwnerPrices' : 'bulkSetPrices', { prices });
+      setSelectedIds(new Set());
       await loadData(selectedCategoryId);
       setStatusMsg(`Priced ${data.count} products at ${label}`);
     } catch (err) {
@@ -1742,8 +1757,9 @@ function AdminProductsPage({ adminPassword, role }) {
             <label>Bulk pricing</label>
             <small>
               {isOwner
-                ? 'Cost + your markup = your price. The rest of the admin — and the store — sees your price as the product cost.'
-                : 'Cost + your markup = the store’s retail price, across many products at once. Unpriced products sell at cost.'}
+                ? 'Cost + your markup = your price. The rest of the admin — and the store — sees your price as the product cost. '
+                : 'Cost + your markup = the store’s retail price, across many products at once. Unpriced products sell at cost. '}
+              Tip: tick the checkboxes to price only those products.
             </small>
           </div>
           <div className="admin-bulk-price-row">
@@ -1760,15 +1776,22 @@ function AdminProductsPage({ adminPassword, role }) {
               <option value="pct">% over cost</option>
               <option value="usd">$ over cost</option>
             </select>
-            <select value={bulkScope} onChange={e => setBulkScope(e.target.value)}>
-              <option value="unpriced">Only unpriced ({unpricedCount})</option>
-              <option value="all">All products ({products.length})</option>
-            </select>
+            {pickingForBulk ? (
+              <span className="admin-bulk-picked">
+                {selectedIds.size} ticked
+                <button type="button" onClick={() => setSelectedIds(new Set())}>clear</button>
+              </span>
+            ) : (
+              <select value={bulkScope} onChange={e => setBulkScope(e.target.value)}>
+                <option value="unpriced">Only unpriced ({unpricedCount})</option>
+                <option value="all">All products ({products.length})</option>
+              </select>
+            )}
             <label className="admin-bulk-99">
               <input type="checkbox" checked={bulkNice99} onChange={e => setBulkNice99(e.target.checked)} />
               end in .99
             </label>
-            <button onClick={applyBulk} disabled={bulkSaving || !bulkAmountValid || !bulkTargets.length}>
+            <button onClick={applyBulk} disabled={bulkSaving}>
               {bulkSaving ? 'Applying…' : `Apply to ${bulkTargets.length}`}
             </button>
           </div>
@@ -1802,9 +1825,11 @@ function AdminProductsPage({ adminPassword, role }) {
               <div key={product.id} className={`admin-cat-product ${isHidden ? 'hidden-product' : ''}`}>
                 <input
                   type="checkbox"
-                  checked={assignedProductIds.has(product.id)}
-                  disabled={!selectedCategoryId}
-                  onChange={e => toggleAssignment(product.id, e.target.checked)}
+                  title={selectedCategoryId ? 'In this category' : 'Tick products to bulk-price just those'}
+                  checked={selectedCategoryId ? assignedProductIds.has(product.id) : selectedIds.has(product.id)}
+                  onChange={e => (selectedCategoryId
+                    ? toggleAssignment(product.id, e.target.checked)
+                    : toggleSelected(product.id, e.target.checked))}
                 />
                 <img src={product.image} alt="" />
                 <div className="admin-cat-product-info">
@@ -2135,6 +2160,7 @@ function AdminDashboard({ adminPassword, role }) {
           </button>
           <img src="/shift-logo.png" alt="Shift" style={{ height: 28 }} />
           <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#888' }}>Admin</span>
+          <span style={{ fontSize: 10, color: '#bbb', fontWeight: 600 }} title="Build version">v-{typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev'}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <a href="/" style={{ fontSize: 12, color: '#888', textDecoration: 'none', fontWeight: 600 }}>View Store</a>

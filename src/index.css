@@ -2389,6 +2389,28 @@ img { max-width: 100%; display: block; }
   white-space: nowrap;
   cursor: pointer;
 }
+.admin-bulk-picked {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #111;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--red);
+  border-radius: 6px;
+}
+.admin-bulk-price-row .admin-bulk-picked button {
+  background: none;
+  border: none;
+  color: var(--red);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 0;
+}
 .admin-bulk-price-row button {
   padding: 10px 16px;
   background: var(--red);
