@@ -43,6 +43,7 @@ function ProductsProvider({ children }) {
             : [{ name: 'Default', hex: '#0A0A0A', images: imgs }];
         }
         if (ov.name) next.name = ov.name;
+        if (ov.description) next.description = ov.description;
         if (ov.price != null) { next.price = ov.price; next.basePrice = ov.price; }
         return next;
       });
@@ -1370,8 +1371,11 @@ function AdminProductsPage({ adminPassword, role }) {
   const [ownerPrices, setOwnerPrices] = useState({});  // productId -> number (owner's private layer)
   const [priceDrafts, setPriceDrafts] = useState({});  // productId -> string (the editable price for this role)
   const [nameDrafts, setNameDrafts] = useState({});    // productId -> string (display-name edits)
+  const [descOpenId, setDescOpenId] = useState(null);  // productId with the description editor open
+  const [descDraft, setDescDraft] = useState('');
   const [savingId, setSavingId] = useState(null);
   const [savingNameId, setSavingNameId] = useState(null);
+  const [savingDesc, setSavingDesc] = useState(false);
   const [bulkAmount, setBulkAmount] = useState('');    // bulk markup amount (string)
   const [bulkMode, setBulkMode] = useState('pct');     // pct = % over cost, usd = $ over cost
   const [bulkScope, setBulkScope] = useState('unpriced'); // unpriced | all
@@ -1539,7 +1543,7 @@ function AdminProductsPage({ adminPassword, role }) {
     }
     setSavingId(product.id);
     try {
-      const hasOtherOverride = (cur.image_urls?.length || 0) > 0 || !!cur.name;
+      const hasOtherOverride = (cur.image_urls?.length || 0) > 0 || !!cur.name || !!cur.description;
       if (price == null && !hasOtherOverride) {
         await contentFetch('clearOverride', { productId: product.id });
         setOverrides(o => { const n = { ...o }; delete n[product.id]; return n; });
@@ -1549,8 +1553,9 @@ function AdminProductsPage({ adminPassword, role }) {
           imageUrls: cur.image_urls || [],
           name: cur.name || null,
           price,
+          description: cur.description || null,
         });
-        setOverrides(o => ({ ...o, [product.id]: { image_urls: cur.image_urls || [], name: cur.name || null, price } }));
+        setOverrides(o => ({ ...o, [product.id]: { image_urls: cur.image_urls || [], name: cur.name || null, price, description: cur.description || null } }));
       }
       setStatusMsg(price == null ? `Reset to cost: ${product.name}` : `Price saved: ${product.name} → $${price.toFixed(2)}`);
     } catch (err) {
@@ -1568,7 +1573,7 @@ function AdminProductsPage({ adminPassword, role }) {
     if (nameDrafts[product.id] == null || draft === (cur.name || '')) return; // untouched or unchanged
     setSavingNameId(product.id);
     try {
-      const hasOther = (cur.image_urls?.length || 0) > 0 || cur.price != null;
+      const hasOther = (cur.image_urls?.length || 0) > 0 || cur.price != null || !!cur.description;
       if (!draft && !hasOther) {
         await contentFetch('clearOverride', { productId: product.id });
         setOverrides(o => { const n = { ...o }; delete n[product.id]; return n; });
@@ -1578,8 +1583,9 @@ function AdminProductsPage({ adminPassword, role }) {
           imageUrls: cur.image_urls || [],
           name: draft || null,
           price: cur.price ?? null,
+          description: cur.description || null,
         });
-        setOverrides(o => ({ ...o, [product.id]: { image_urls: cur.image_urls || [], name: draft || null, price: cur.price ?? null } }));
+        setOverrides(o => ({ ...o, [product.id]: { image_urls: cur.image_urls || [], name: draft || null, price: cur.price ?? null, description: cur.description || null } }));
       }
       setStatusMsg(draft ? `Renamed to “${draft}”` : `Name reset: ${product.name}`);
       setNameDrafts(d => { const n = { ...d }; delete n[product.id]; return n; });
@@ -1587,6 +1593,41 @@ function AdminProductsPage({ adminPassword, role }) {
       setStatusMsg(err.message);
     }
     setSavingNameId(null);
+  };
+
+  // Save (or clear) a product's store description. Empty = back to original.
+  const saveDescription = async (product) => {
+    const cur = overrides[product.id] || {};
+    let draft = descDraft.trim();
+    if (draft === (product.description || '').trim()) draft = ''; // retyping the original = clear
+    setSavingDesc(true);
+    try {
+      const hasOther = (cur.image_urls?.length || 0) > 0 || !!cur.name || cur.price != null;
+      if (!draft && !hasOther) {
+        await contentFetch('clearOverride', { productId: product.id });
+        setOverrides(o => { const n = { ...o }; delete n[product.id]; return n; });
+      } else {
+        await contentFetch('setOverride', {
+          productId: product.id,
+          imageUrls: cur.image_urls || [],
+          name: cur.name || null,
+          price: cur.price ?? null,
+          description: draft || null,
+        });
+        setOverrides(o => ({ ...o, [product.id]: { image_urls: cur.image_urls || [], name: cur.name || null, price: cur.price ?? null, description: draft || null } }));
+      }
+      setStatusMsg(draft ? `Description saved: ${product.name}` : `Description reset: ${product.name}`);
+      setDescOpenId(null);
+    } catch (err) {
+      setStatusMsg(err.message);
+    }
+    setSavingDesc(false);
+  };
+
+  const openDescEditor = (product) => {
+    if (descOpenId === product.id) { setDescOpenId(null); return; }
+    setDescDraft(overrides[product.id]?.description || product.description || '');
+    setDescOpenId(product.id);
   };
 
   // ── Bulk pricing: cost + markup across many products in one click ──
@@ -1896,6 +1937,30 @@ function AdminProductsPage({ adminPassword, role }) {
                 <button className="admin-cat-hide-btn" onClick={() => toggleHidden(product.id, !isHidden)}>
                   {isHidden ? 'Show' : 'Hide'}
                 </button>
+                <button
+                  className={`admin-cat-hide-btn admin-desc-btn ${overrides[product.id]?.description ? 'has-desc' : ''}`}
+                  title="Edit the product description shown on the store"
+                  onClick={() => openDescEditor(product)}
+                >
+                  Description
+                </button>
+                {descOpenId === product.id && (
+                  <div className="admin-desc-editor">
+                    <textarea
+                      rows={4}
+                      value={descDraft}
+                      onChange={e => setDescDraft(e.target.value)}
+                      placeholder="Product description shown on the store…"
+                    />
+                    <div className="admin-desc-actions">
+                      <button className="admin-desc-save" onClick={() => saveDescription(product)} disabled={savingDesc}>
+                        {savingDesc ? 'Saving…' : 'Save'}
+                      </button>
+                      <button onClick={() => setDescDraft(product.description || '')}>Use original</button>
+                      <button onClick={() => setDescOpenId(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -2020,6 +2085,7 @@ function AdminMediaPage({ adminPassword }) {
       imageUrls: [...(cur.image_urls || []), url],
       name: cur.name || null,
       price: cur.price ?? null,
+      description: cur.description || null,
     });
     setStatusMsg('Mockup added ✓');
     await load();
@@ -2031,14 +2097,15 @@ function AdminMediaPage({ adminPassword }) {
   // Persist a new ordering (or empty = clear) of a product's uploaded mockups.
   const saveOverrideImages = (product, imageUrls) => withBusy('Saving…', async () => {
     const cur = overrides[product.id] || {};
-    // Only delete the row when nothing else lives on it — a rename or retail
-    // price must survive removing the last uploaded photo.
-    if (imageUrls.length === 0 && !cur.name && cur.price == null) {
+    // Only delete the row when nothing else lives on it — a rename, retail
+    // price, or description must survive removing the last uploaded photo.
+    if (imageUrls.length === 0 && !cur.name && cur.price == null && !cur.description) {
       await post('/api/admin/content', { action: 'clearOverride', productId: product.id });
     } else {
       await post('/api/admin/content', {
         action: 'setOverride', productId: product.id, imageUrls,
         name: cur.name || null, price: cur.price ?? null,
+        description: cur.description || null,
       });
     }
     await load();

@@ -46,6 +46,7 @@ export default async function handler(req, res) {
           image_urls: Array.isArray(o.image_urls) ? o.image_urls : [],
           name: o.name || null,
           price: o.price != null ? Number(o.price) : null,
+          description: o.description || null,
         }
       }
       const payload = {
@@ -106,13 +107,14 @@ export default async function handler(req, res) {
     }
 
     if (action === 'setOverride') {
-      const { productId, imageUrls, name, price } = req.body
+      const { productId, imageUrls, name, price, description } = req.body
       if (!productId) return res.status(400).json({ error: 'productId required' })
       const row = {
         product_id: productId,
         image_urls: Array.isArray(imageUrls) ? imageUrls : [],
         name: name && String(name).trim() ? String(name).trim() : null,
         price: price === '' || price == null ? null : Number(price),
+        description: description && String(description).trim() ? String(description).trim() : null,
         updated_at: new Date().toISOString(),
       }
       const { error } = await supabase.from('product_overrides').upsert(row, { onConflict: 'product_id' })
@@ -139,6 +141,7 @@ export default async function handler(req, res) {
           image_urls: Array.isArray(cur?.image_urls) ? cur.image_urls : [],
           name: cur?.name || null,
           price: p,
+          description: cur?.description || null,
           updated_at: now,
         }
       })
