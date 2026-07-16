@@ -80,6 +80,33 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true })
     }
 
+    // Bulk markup: price many products in one call. prices = { productId: number }.
+    // Preserves any existing photo/name override on each product.
+    if (action === 'bulkSetPrices') {
+      const { prices } = req.body
+      const entries = Object.entries(prices || {})
+        .map(([id, p]) => [id, Number(p)])
+        .filter(([id, p]) => id && !isNaN(p) && p >= 0)
+      if (!entries.length) return res.status(400).json({ error: 'No valid prices given' })
+      const ids = entries.map(([id]) => id)
+      const { data: existing } = await supabase.from('product_overrides').select('*').in('product_id', ids)
+      const byId = new Map((existing || []).map(r => [r.product_id, r]))
+      const now = new Date().toISOString()
+      const rows = entries.map(([id, p]) => {
+        const cur = byId.get(id)
+        return {
+          product_id: id,
+          image_urls: Array.isArray(cur?.image_urls) ? cur.image_urls : [],
+          name: cur?.name || null,
+          price: p,
+          updated_at: now,
+        }
+      })
+      const { error } = await supabase.from('product_overrides').upsert(rows, { onConflict: 'product_id' })
+      if (error) return res.status(500).json({ error: error.message })
+      return res.status(200).json({ ok: true, count: rows.length })
+    }
+
     if (action === 'clearOverride') {
       const { productId } = req.body
       if (!productId) return res.status(400).json({ error: 'productId required' })

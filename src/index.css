@@ -2333,6 +2333,78 @@ img { max-width: 100%; display: block; }
   opacity: 0.7;
 }
 
+.admin-bulk-price {
+  padding: 16px 24px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+  display: grid;
+  gap: 10px;
+}
+.admin-bulk-price-head {
+  display: grid;
+  gap: 2px;
+}
+.admin-bulk-price-head label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #888;
+}
+.admin-bulk-price-head small {
+  font-size: 12px;
+  color: #999;
+}
+.admin-bulk-price-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.admin-bulk-price-row input[type="number"] {
+  width: 90px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  color: #111;
+  font-size: 13px;
+}
+.admin-bulk-price-row select {
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  color: #111;
+  font-size: 13px;
+  cursor: pointer;
+}
+.admin-bulk-99 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.admin-bulk-price-row button {
+  padding: 10px 16px;
+  background: var(--red);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.admin-bulk-price-row button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .admin-cat-edit {
   padding: 16px 24px;
   border-bottom: 1px solid #e0e0e0;

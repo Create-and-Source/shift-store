@@ -1346,6 +1346,11 @@ function AdminProductsPage({ adminPassword }) {
   const [overrides, setOverrides] = useState({});      // productId -> { image_urls, name, price }
   const [priceDrafts, setPriceDrafts] = useState({});  // productId -> string (her sell price)
   const [savingId, setSavingId] = useState(null);
+  const [bulkAmount, setBulkAmount] = useState('');    // bulk markup amount (string)
+  const [bulkMode, setBulkMode] = useState('pct');     // pct = % over cost, usd = $ over cost
+  const [bulkScope, setBulkScope] = useState('unpriced'); // unpriced | all
+  const [bulkNice99, setBulkNice99] = useState(false); // round up so prices end in .99
+  const [bulkSaving, setBulkSaving] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categoryNameDraft, setCategoryNameDraft] = useState('');
@@ -1490,6 +1495,38 @@ function AdminProductsPage({ adminPassword }) {
     setSavingId(null);
   };
 
+  // ── Bulk pricing: cost + markup across many products in one click ──
+  const bulkTargets = products.filter(p => bulkScope === 'all' || overrides[p.id]?.price == null);
+  const unpricedCount = products.filter(p => overrides[p.id]?.price == null).length;
+
+  const computeBulkPrice = (cost) => {
+    const amt = Number(bulkAmount);
+    let p = bulkMode === 'pct' ? cost * (1 + amt / 100) : cost + amt;
+    if (bulkNice99) p = Math.max(0.99, Math.ceil(p) - 0.01);
+    return Math.round(p * 100) / 100;
+  };
+
+  const bulkAmountValid = bulkAmount.trim() !== '' && !isNaN(Number(bulkAmount)) && Number(bulkAmount) > 0;
+
+  const applyBulk = async () => {
+    if (!bulkAmountValid) { setStatusMsg('Enter a markup amount first'); return; }
+    if (!bulkTargets.length) { setStatusMsg('No products to price'); return; }
+    const amt = Number(bulkAmount);
+    const label = bulkMode === 'pct' ? `cost + ${amt}%` : `cost + $${amt.toFixed(2)}`;
+    if (!confirm(`Price ${bulkTargets.length} product${bulkTargets.length === 1 ? '' : 's'} at ${label}${bulkNice99 ? ' (ending .99)' : ''}?`)) return;
+    setBulkSaving(true);
+    try {
+      const prices = {};
+      for (const p of bulkTargets) prices[p.id] = computeBulkPrice(p.price);
+      const data = await contentFetch('bulkSetPrices', { prices });
+      await loadData(selectedCategoryId);
+      setStatusMsg(`Priced ${data.count} products at ${label}`);
+    } catch (err) {
+      setStatusMsg(err.message);
+    }
+    setBulkSaving(false);
+  };
+
   const createCategory = async (e) => {
     e.preventDefault();
     if (!newCategoryName.trim()) return;
@@ -1603,6 +1640,49 @@ function AdminProductsPage({ adminPassword }) {
               {opt.label} <span>{opt.count}</span>
             </button>
           ))}
+        </div>
+
+        <div className="admin-bulk-price">
+          <div className="admin-bulk-price-head">
+            <label>Bulk pricing</label>
+            <small>Cost + your markup = your price, across many products at once. Unpriced products sell at cost.</small>
+          </div>
+          <div className="admin-bulk-price-row">
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              inputMode="decimal"
+              placeholder={bulkMode === 'pct' ? 'e.g. 40' : 'e.g. 10'}
+              value={bulkAmount}
+              onChange={e => setBulkAmount(e.target.value)}
+            />
+            <select value={bulkMode} onChange={e => setBulkMode(e.target.value)}>
+              <option value="pct">% over cost</option>
+              <option value="usd">$ over cost</option>
+            </select>
+            <select value={bulkScope} onChange={e => setBulkScope(e.target.value)}>
+              <option value="unpriced">Only unpriced ({unpricedCount})</option>
+              <option value="all">All products ({products.length})</option>
+            </select>
+            <label className="admin-bulk-99">
+              <input type="checkbox" checked={bulkNice99} onChange={e => setBulkNice99(e.target.checked)} />
+              end in .99
+            </label>
+            <button onClick={applyBulk} disabled={bulkSaving || !bulkAmountValid || !bulkTargets.length}>
+              {bulkSaving ? 'Applying…' : `Apply to ${bulkTargets.length}`}
+            </button>
+          </div>
+          {bulkAmountValid && bulkTargets.length > 0 && (() => {
+            const ex = bulkTargets[0];
+            const sell = computeBulkPrice(ex.price);
+            const profit = sell - ex.price;
+            return (
+              <small className="admin-price-earn">
+                Example: {ex.name} — cost ${ex.price.toFixed(2)} → ${sell.toFixed(2)} · you earn ${profit.toFixed(2)}
+              </small>
+            );
+          })()}
         </div>
 
         {selectedCategoryId && (
