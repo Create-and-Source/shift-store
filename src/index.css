@@ -2485,6 +2485,27 @@ img { max-width: 100%; display: block; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.admin-name-input {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-weight: 600;
+  color: #111;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin-left: -5px;
+}
+.admin-name-input:hover { border-color: #e0e0e0; }
+.admin-name-input:focus { background: #fff; border-color: #bbb; outline: none; }
+.admin-name-orig {
+  font-size: 10px;
+  color: #aaa;
 }
 .admin-cat-tags {
   display: flex;

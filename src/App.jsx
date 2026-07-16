@@ -1369,7 +1369,9 @@ function AdminProductsPage({ adminPassword, role }) {
   const [overrides, setOverrides] = useState({});      // productId -> { image_urls, name, price } (retail layer)
   const [ownerPrices, setOwnerPrices] = useState({});  // productId -> number (owner's private layer)
   const [priceDrafts, setPriceDrafts] = useState({});  // productId -> string (the editable price for this role)
+  const [nameDrafts, setNameDrafts] = useState({});    // productId -> string (display-name edits)
   const [savingId, setSavingId] = useState(null);
+  const [savingNameId, setSavingNameId] = useState(null);
   const [bulkAmount, setBulkAmount] = useState('');    // bulk markup amount (string)
   const [bulkMode, setBulkMode] = useState('pct');     // pct = % over cost, usd = $ over cost
   const [bulkScope, setBulkScope] = useState('unpriced'); // unpriced | all
@@ -1554,6 +1556,36 @@ function AdminProductsPage({ adminPassword, role }) {
       setStatusMsg(err.message);
     }
     setSavingId(null);
+  };
+
+  // Save (or clear) a product's display name. Typing the original name back
+  // (or blanking the field) removes the rename. Preserves photos + retail.
+  const saveName = async (product) => {
+    const cur = overrides[product.id] || {};
+    let draft = (nameDrafts[product.id] ?? '').trim();
+    if (draft === product.name) draft = '';
+    if (nameDrafts[product.id] == null || draft === (cur.name || '')) return; // untouched or unchanged
+    setSavingNameId(product.id);
+    try {
+      const hasOther = (cur.image_urls?.length || 0) > 0 || cur.price != null;
+      if (!draft && !hasOther) {
+        await contentFetch('clearOverride', { productId: product.id });
+        setOverrides(o => { const n = { ...o }; delete n[product.id]; return n; });
+      } else {
+        await contentFetch('setOverride', {
+          productId: product.id,
+          imageUrls: cur.image_urls || [],
+          name: draft || null,
+          price: cur.price ?? null,
+        });
+        setOverrides(o => ({ ...o, [product.id]: { image_urls: cur.image_urls || [], name: draft || null, price: cur.price ?? null } }));
+      }
+      setStatusMsg(draft ? `Renamed to “${draft}”` : `Name reset: ${product.name}`);
+      setNameDrafts(d => { const n = { ...d }; delete n[product.id]; return n; });
+    } catch (err) {
+      setStatusMsg(err.message);
+    }
+    setSavingNameId(null);
   };
 
   // ── Bulk pricing: cost + markup across many products in one click ──
@@ -1776,7 +1808,21 @@ function AdminProductsPage({ adminPassword, role }) {
                 />
                 <img src={product.image} alt="" />
                 <div className="admin-cat-product-info">
-                  <span className="admin-cat-product-name">{product.name}</span>
+                  <span className="admin-cat-product-name">
+                    <input
+                      className="admin-name-input"
+                      type="text"
+                      title="Product name shown on the store — click to edit"
+                      value={nameDrafts[product.id] ?? (overrides[product.id]?.name || product.name)}
+                      onChange={e => setNameDrafts(d => ({ ...d, [product.id]: e.target.value }))}
+                      onBlur={() => saveName(product)}
+                      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                    />
+                    {savingNameId === product.id && <Loader size={12} className="spin" />}
+                  </span>
+                  {overrides[product.id]?.name && (
+                    <small className="admin-name-orig">was: {product.name}</small>
+                  )}
                   <div className="admin-cat-tags">
                     {isHidden && <small className="tag-hidden">Hidden</small>}
                     {productCats.length ? productCats.map(c => <small key={c}>{c}</small>) : <small className="tag-empty">Uncategorized</small>}
@@ -1960,7 +2006,9 @@ function AdminMediaPage({ adminPassword }) {
   // Persist a new ordering (or empty = clear) of a product's uploaded mockups.
   const saveOverrideImages = (product, imageUrls) => withBusy('Saving…', async () => {
     const cur = overrides[product.id] || {};
-    if (imageUrls.length === 0) {
+    // Only delete the row when nothing else lives on it — a rename or retail
+    // price must survive removing the last uploaded photo.
+    if (imageUrls.length === 0 && !cur.name && cur.price == null) {
       await post('/api/admin/content', { action: 'clearOverride', productId: product.id });
     } else {
       await post('/api/admin/content', {
