@@ -4,14 +4,14 @@ import { createClient } from '@supabase/supabase-js'
 //   owner (ADMIN_KEY)  — Tovah. Sees true source costs + her private price layer.
 //   staff (STAFF_KEY)  — everyone else. Sees the owner's price AS the product cost;
 //                        the private layer does not exist from their point of view.
-// STAFF_KEY has no fallback on purpose — staff login is impossible until the
-// env var is set in Vercel.
-const ADMIN_KEY = process.env.ADMIN_KEY || 'shift-admin-2026'
+// Neither key has a code fallback — if an env var is missing, that login is
+// simply impossible (fail closed, never fail open to a default password).
+const ADMIN_KEY = process.env.ADMIN_KEY || ''
 const STAFF_KEY = process.env.STAFF_KEY || ''
 
 export function roleFromReq(req) {
   const key = req.headers['x-admin-key']
-  if (key && key === ADMIN_KEY) return 'owner'
+  if (key && ADMIN_KEY && key === ADMIN_KEY) return 'owner'
   if (key && STAFF_KEY && key === STAFF_KEY) return 'staff'
   return null
 }

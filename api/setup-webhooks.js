@@ -1,5 +1,6 @@
 import { shopifyAdminEnabled, listShopifyWebhooks, createShopifyWebhook } from './_lib/shopify.js'
 import { printifyEnabled, listPrintifyWebhooks, createPrintifyWebhook, deletePrintifyWebhook } from './_lib/printify.js'
+import { roleFromReq } from './_lib/adminRole.js'
 
 // One-time (idempotent) registration of the real-time tracking webhooks with
 // Printify + Shopify, pointing at this deployment. Admin-only; safe to re-run —
@@ -8,13 +9,12 @@ import { printifyEnabled, listPrintifyWebhooks, createPrintifyWebhook, deletePri
 //   Shopify  : orders/fulfilled + fulfillments/update           -> /api/shopify-webhook
 //   Printify : order:shipment:created + order:shipment:delivered -> /api/printify-webhook
 
-const ADMIN_KEY = process.env.ADMIN_KEY || 'shift-admin-2026'
-
 const SHOPIFY_TOPICS = ['ORDERS_FULFILLED', 'FULFILLMENTS_UPDATE']
 const PRINTIFY_TOPICS = ['order:shipment:created', 'order:shipment:delivered']
 
 export default async function handler(req, res) {
-  if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(401).json({ error: 'Unauthorized' })
+  // Owner-only — infrastructure setup, not day-to-day store running.
+  if (roleFromReq(req) !== 'owner') return res.status(401).json({ error: 'Unauthorized' })
 
   const host = req.headers['x-forwarded-host'] || req.headers.host
   const base = `https://${host}`
