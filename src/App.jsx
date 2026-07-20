@@ -2943,6 +2943,18 @@ function AccountPage() {
     if (user) setWasLoggedOut(false);
   }, [user]);
 
+  // The reset link in the email lands the user back here with a recovery
+  // session — show the set-new-password card instead of the dashboard. The
+  // hash check catches a mid-load arrival; the auth event is the backstop.
+  const [recovery, setRecovery] = useState(() => window.location.hash.includes('type=recovery'));
+  const [newPassword, setNewPassword] = useState('');
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   const handleAuth = async (e) => {
     e.preventDefault();
     setError('');
@@ -2952,10 +2964,10 @@ function AccountPage() {
     // back to the Supabase project's Site URL (which once pointed at localhost).
     const emailRedirectTo = `${window.location.origin}/account`;
 
-    if (authMode === 'magic') {
-      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo } });
+    if (authMode === 'reset') {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: emailRedirectTo });
       if (error) setError(error.message);
-      else setMessage('Check your email for a login link!');
+      else setMessage('Reset link sent — check your email.');
       return;
     }
 
@@ -2966,13 +2978,45 @@ function AccountPage() {
     }
 
     if (authMode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
+      // Email confirmation is off — a real signup returns a session and the
+      // page flips to the dashboard on its own. An existing email returns a
+      // fake user with no session (Supabase's enumeration guard).
+      const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) setError(error.message);
-      else setMessage('Account created! Check your email to confirm.');
+      else if (data?.user && !data.session) setError('An account with this email already exists — use Sign In or "Forgot password?".');
     }
   };
 
+  const saveNewPassword = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (newPassword.length < 8) { setError('Password must be at least 8 characters'); return; }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) setError(error.message);
+    else setRecovery(false);
+  };
+
   if (loading) return <div style={{ padding: '200px 0', textAlign: 'center' }}><Loader size={24} className="spin" /></div>;
+
+  if (user && recovery) {
+    return (
+      <>
+        <div className="scanlines" />
+        <div className="portal-auth">
+          <div className="portal-auth-card">
+            <img src="/shift-logo.png" alt="Shift" style={{ height: 36, filter: 'brightness(0) invert(1)', marginBottom: 24 }} />
+            <h2 style={{ fontSize: 20, fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>New Password</h2>
+            <p style={{ fontSize: 13, color: 'var(--gray)', marginBottom: 24 }}>Choose a new password for {user.email}</p>
+            <form onSubmit={saveNewPassword}>
+              <input type="password" placeholder="New password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required className="portal-input" />
+              <button type="submit" className="portal-btn">Save Password</button>
+            </form>
+            {error && <div style={{ color: '#e53e3e', fontSize: 13, marginTop: 12 }}>{error}</div>}
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (!user) {
     return (
@@ -2983,24 +3027,37 @@ function AccountPage() {
             <img src="/shift-logo.png" alt="Shift" style={{ height: 36, filter: 'brightness(0) invert(1)', marginBottom: 24 }} />
             <h2 style={{ fontSize: 20, fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>My Account</h2>
             <p style={{ fontSize: 13, color: 'var(--gray)', marginBottom: 24 }}>
-              {cart.length > 0 ? 'Sign in to continue to checkout' : 'Track your orders and manage your account'}
+              {authMode === 'reset' ? "We'll email you a link to reset your password"
+                : cart.length > 0 ? 'Sign in to continue to checkout' : 'Track your orders and manage your account'}
             </p>
 
-            <div className="portal-auth-tabs">
-              <button className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>Sign In</button>
-              <button className={authMode === 'signup' ? 'active' : ''} onClick={() => setAuthMode('signup')}>Sign Up</button>
-              <button className={authMode === 'magic' ? 'active' : ''} onClick={() => setAuthMode('magic')}>Magic Link</button>
-            </div>
+            {authMode !== 'reset' && (
+              <div className="portal-auth-tabs">
+                <button className={authMode === 'login' ? 'active' : ''} onClick={() => { setAuthMode('login'); setError(''); setMessage(''); }}>Sign In</button>
+                <button className={authMode === 'signup' ? 'active' : ''} onClick={() => { setAuthMode('signup'); setError(''); setMessage(''); }}>Sign Up</button>
+              </div>
+            )}
 
             <form onSubmit={handleAuth}>
               <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required className="portal-input" />
-              {authMode !== 'magic' && (
+              {authMode !== 'reset' && (
                 <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required className="portal-input" />
               )}
               <button type="submit" className="portal-btn">
-                {authMode === 'magic' ? 'Send Magic Link' : authMode === 'signup' ? 'Create Account' : 'Sign In'}
+                {authMode === 'reset' ? 'Send Reset Link' : authMode === 'signup' ? 'Create Account' : 'Sign In'}
               </button>
             </form>
+
+            {authMode === 'login' && (
+              <button type="button" className="portal-forgot" onClick={() => { setAuthMode('reset'); setError(''); setMessage(''); }}>
+                Forgot password?
+              </button>
+            )}
+            {authMode === 'reset' && (
+              <button type="button" className="portal-forgot" onClick={() => { setAuthMode('login'); setError(''); setMessage(''); }}>
+                Back to sign in
+              </button>
+            )}
 
             {error && <div style={{ color: '#e53e3e', fontSize: 13, marginTop: 12 }}>{error}</div>}
             {message && <div style={{ color: '#38a169', fontSize: 13, marginTop: 12 }}>{message}</div>}

@@ -3061,6 +3061,18 @@ img { max-width: 100%; display: block; }
   margin-bottom: 12px;
   box-sizing: border-box;
 }
+.portal-forgot {
+  background: none;
+  border: none;
+  color: var(--gray);
+  font-size: 12px;
+  margin-top: 14px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.portal-forgot:hover { color: #fff; }
+
 .portal-btn {
   width: 100%;
   padding: 12px;
