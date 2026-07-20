@@ -7,6 +7,7 @@ import {
   toPrintifyAddress,
 } from './_lib/printify.js'
 import { shopifyAdminEnabled, createShopifyOrder } from './_lib/shopify.js'
+import { getOwnerPrices } from './_lib/adminRole.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
@@ -79,6 +80,27 @@ async function getOrCreateCustomer(email, name) {
   }
 
   return customer.id
+}
+
+// Purchase-time cost snapshot: true source cost per product (via our own feeds
+// with the owner key — unmasked) + the owner's private price layer. Stamped
+// onto order_items so profit reports stay exact no matter how catalog prices
+// drift later. Best-effort: on any failure the columns stay null and the admin
+// falls back to live catalog costs for that order.
+async function costSnapshot(host) {
+  const h = { headers: { 'x-admin-key': process.env.ADMIN_KEY || '' } }
+  const base = `https://${host}`
+  const [a, b, c, ownerPrices] = await Promise.all([
+    fetch(`${base}/api/products`, h).then(r => r.json()).catch(() => ({})),
+    fetch(`${base}/api/printify/products`, h).then(r => r.json()).catch(() => ({})),
+    fetch(`${base}/api/shopify/products`, h).then(r => r.json()).catch(() => ({})),
+    getOwnerPrices(),
+  ])
+  const costs = {}
+  for (const p of [...(a.products || []), ...(b.products || []), ...(c.products || [])]) {
+    if (p?.id != null && p.price != null) costs[p.id] = Number(p.price)
+  }
+  return { costs, ownerPrices }
 }
 
 export default async function handler(req, res) {
@@ -176,7 +198,14 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to create order' })
     }
 
-    // Create order items
+    // Create order items, stamped with purchase-time costs
+    let snap = { costs: {}, ownerPrices: {} }
+    try {
+      snap = await costSnapshot(req.headers.host)
+    } catch (snapErr) {
+      console.error('Cost snapshot failed (non-fatal):', snapErr.message)
+    }
+
     const orderItemRows = items.map(item => ({
       order_id: order.id,
       product_id: item.productId,
@@ -185,14 +214,21 @@ export default async function handler(req, res) {
       size: item.size,
       quantity: item.qty,
       unit_price: item.price,
+      cost: snap.costs[item.productId] ?? null,
+      owner_price: snap.ownerPrices[item.productId] ?? null,
     }))
 
-    const { error: itemsErr } = await supabase
+    let { error: itemsErr } = await supabase
       .from('order_items')
       .insert(orderItemRows)
 
+    // If the snapshot columns don't exist yet (migration not run), never lose
+    // the items — retry without them.
     if (itemsErr) {
-      console.error('Order items error:', itemsErr)
+      console.error('Order items error (retrying bare):', itemsErr)
+      const bare = orderItemRows.map(({ cost, owner_price, ...r }) => r)
+      const { error: retryErr } = await supabase.from('order_items').insert(bare)
+      if (retryErr) console.error('Order items error:', retryErr)
     }
 
     console.log('Order created:', order.id, 'for', customerEmail)

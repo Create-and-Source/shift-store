@@ -2705,6 +2705,46 @@ img { max-width: 100%; display: block; }
   color: #111;
 }
 .admin-profit-strip strong.earn { color: #1f9d55; }
+.admin-export-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  flex-wrap: wrap;
+}
+.admin-export-bar input[type="date"] {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #fff;
+  color: #111;
+}
+.admin-export-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #999;
+}
+.admin-export-dash {
+  font-size: 11px;
+  color: #999;
+}
+.admin-export-hint {
+  font-size: 11px;
+  color: #aaa;
+  flex-basis: 100%;
+}
+@media (min-width: 900px) {
+  .admin-export-hint {
+    flex-basis: auto;
+    margin-left: auto;
+  }
+}
 .admin-profit-note {
   font-size: 11px;
   color: #aaa;

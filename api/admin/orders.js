@@ -9,7 +9,8 @@ import { roleFromReq } from '../_lib/adminRole.js'
 
 export default async function handler(req, res) {
   // Admin auth via header — owner or staff login both work here.
-  if (!roleFromReq(req)) {
+  const role = roleFromReq(req)
+  if (!role) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
@@ -34,6 +35,19 @@ export default async function handler(req, res) {
     if (error) {
       console.error('Orders fetch error:', error)
       return res.status(500).json({ error: error.message })
+    }
+
+    // Purchase-time cost snapshots live on order_items as `cost` (true source
+    // cost) + `owner_price` (the owner's private layer). Staff sees the owner's
+    // price AS the cost — the true cost and the private layer never leave the
+    // server for non-owner eyes.
+    if (role !== 'owner') {
+      for (const o of data || []) {
+        for (const it of o.items || []) {
+          if (it.owner_price != null) it.cost = it.owner_price
+          delete it.owner_price
+        }
+      }
     }
 
     return res.status(200).json(data)

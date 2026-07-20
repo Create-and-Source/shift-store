@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader, Package, Truck, Eye, LogOut, Lock, Mail, Clock, Search } from 'lucide-react';
+import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader, Package, Truck, Eye, LogOut, Lock, Mail, Clock, Search, Download } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
 /* ═══ PRODUCTS CONTEXT — merges Fulfill Engine + Printify + Shopify ═══ */
@@ -2509,6 +2509,8 @@ function AdminOrdersPage({ adminPassword, role }) {
   const [syncMsg, setSyncMsg] = useState('');
   const [costMap, setCostMap] = useState(null);        // productId -> this role's cost basis
   const [ownerPrices, setOwnerPrices] = useState({});  // owner layer (owner login only)
+  const [csvFrom, setCsvFrom] = useState('');          // profit report date range
+  const [csvTo, setCsvTo] = useState('');
 
   // Cost basis for profit math — the feeds answer per-role (owner: true cost,
   // staff: the owner's price), so the same view shows each her own profit.
@@ -2534,17 +2536,28 @@ function AdminOrdersPage({ adminPassword, role }) {
 
   // What this login earns on one order item. Staff: retail − her cost.
   // Owner: her private price − true cost (the partner's cut is hers to keep).
+  // Items carry a purchase-time cost snapshot (it.cost / it.owner_price, the
+  // API already masks per role) — exact, immune to later price changes. Orders
+  // from before snapshotting fall back to current catalog costs.
   const itemEarn = (it) => {
+    const qty = it.quantity || 1;
+    if (it.cost != null) {
+      const cost = Number(it.cost);
+      if (role === 'owner') return (Number(it.owner_price ?? cost) - cost) * qty;
+      return (Number(it.unit_price) - cost) * qty;
+    }
     if (!costMap) return null;
     const cost = costMap[it.product_id];
     if (cost == null) return null;
-    const qty = it.quantity || 1;
     if (role === 'owner') {
       const mine = ownerPrices[it.product_id];
       return (Number(mine ?? cost) - cost) * qty;
     }
     return (Number(it.unit_price) - cost) * qty;
   };
+
+  // True when every item's profit comes from the purchase-time snapshot.
+  const orderExact = (o) => (o.items || []).length > 0 && o.items.every(it => it.cost != null);
 
   const orderEarn = (order) => {
     const items = order.items || [];
@@ -2559,15 +2572,83 @@ function AdminOrdersPage({ adminPassword, role }) {
 
   const profitTotals = (() => {
     if (!costMap || !orders.length) return null;
-    let revenue = 0, earn = 0, counted = 0;
+    let revenue = 0, earn = 0, counted = 0, estimated = 0;
     for (const o of orders) {
       if (o.status === 'cancelled') continue;
       revenue += Number(o.subtotal ?? o.total) || 0;
       const e = orderEarn(o);
-      if (e != null) { earn += e; counted++; }
+      if (e != null) { earn += e; counted++; if (!orderExact(o)) estimated++; }
     }
-    return { revenue, earn, counted, total: orders.filter(o => o.status !== 'cancelled').length };
+    return { revenue, earn, counted, estimated, total: orders.filter(o => o.status !== 'cancelled').length };
   })();
+
+  // Tax/profit report: one CSV row per item in the date range, using this
+  // login's own numbers (the same per-role math as the strip). Snapshot rows
+  // are exact; pre-snapshot rows are flagged as estimates.
+  const downloadCsv = () => {
+    const from = csvFrom ? new Date(csvFrom + 'T00:00:00') : null;
+    const to = csvTo ? new Date(csvTo + 'T23:59:59') : null;
+    const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const header = ['Date', 'Order', 'Status', 'Product', 'Color', 'Size', 'Qty', 'Sale price'];
+    if (role === 'owner') header.push('Your price');
+    header.push('Cost', 'Profit', 'Cost basis');
+    const lines = [header.map(esc).join(',')];
+    let revenue = 0, profit = 0, itemCount = 0, estimatedRows = 0, unknownRows = 0;
+    for (const o of orders) {
+      if (o.status === 'cancelled') continue;
+      const d = new Date(o.created_at);
+      if ((from && d < from) || (to && d > to)) continue;
+      for (const it of o.items || []) {
+        const qty = it.quantity || 1;
+        const sale = Number(it.unit_price) || 0;
+        const snap = it.cost != null;
+        const cost = snap ? Number(it.cost) : (costMap ? costMap[it.product_id] : null) ?? null;
+        const mine = role === 'owner'
+          ? (snap ? Number(it.owner_price ?? cost) : (cost != null ? Number(ownerPrices[it.product_id] ?? cost) : null))
+          : null;
+        const line = cost == null ? null : (role === 'owner' ? (mine - cost) : (sale - cost)) * qty;
+        const row = [
+          d.toISOString().slice(0, 10),
+          '#' + o.id.slice(0, 8),
+          o.status,
+          it.product_name,
+          it.color || '',
+          it.size || '',
+          qty,
+          sale.toFixed(2),
+        ];
+        if (role === 'owner') row.push(mine != null ? mine.toFixed(2) : '');
+        row.push(
+          cost != null ? cost.toFixed(2) : '',
+          line != null ? line.toFixed(2) : '',
+          cost == null ? 'unknown (product left the catalog)' : (snap ? 'exact (locked at purchase)' : 'estimated (current catalog cost)')
+        );
+        lines.push(row.map(esc).join(','));
+        revenue += sale * qty;
+        itemCount++;
+        if (line != null) profit += line;
+        if (cost == null) unknownRows++; else if (!snap) estimatedRows++;
+      }
+    }
+    lines.push('');
+    lines.push([esc('TOTAL SALES'), esc(revenue.toFixed(2))].join(','));
+    lines.push([esc(role === 'owner' ? 'TOTAL YOU EARN' : 'TOTAL PROFIT'), esc(profit.toFixed(2))].join(','));
+    lines.push([esc('ITEMS'), esc(itemCount)].join(','));
+    lines.push([esc('NOTE'), esc('Sales exclude shipping charges. Cancelled orders excluded.')].join(','));
+    if (estimatedRows || unknownRows) {
+      lines.push([esc('NOTE'), esc(`${estimatedRows} line(s) estimated at current catalog costs, ${unknownRows} with unknown cost — orders from before cost snapshotting.`)].join(','));
+    }
+    const range = (csvFrom || csvTo) ? `${csvFrom || 'start'}-to-${csvTo || 'today'}` : 'all-time';
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `shift-profit-report-${range}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -2679,9 +2760,21 @@ function AdminOrdersPage({ adminPassword, role }) {
             <strong className="earn">${profitTotals.earn.toFixed(2)}</strong>
           </div>
           <span className="admin-profit-note">
-            {filter === 'all' ? 'All orders' : `${filter} orders`} · based on current costs
+            {filter === 'all' ? 'All orders' : `${filter} orders`}
+            {profitTotals.estimated > 0 ? ` · ${profitTotals.estimated} order(s) estimated at current costs` : ' · exact purchase-time costs'}
             {profitTotals.counted < profitTotals.total ? ` · ${profitTotals.total - profitTotals.counted} order(s) not counted (product no longer in the catalog)` : ''}
           </span>
+        </div>
+      )}
+
+      {orders.length > 0 && (
+        <div className="admin-export-bar">
+          <span className="admin-export-label">Profit report</span>
+          <input type="date" value={csvFrom} onChange={e => setCsvFrom(e.target.value)} aria-label="From date" />
+          <span className="admin-export-dash">to</span>
+          <input type="date" value={csvTo} onChange={e => setCsvTo(e.target.value)} aria-label="To date" />
+          <button className="filter-btn" onClick={downloadCsv}><Download size={12} /> Download CSV</button>
+          <span className="admin-export-hint">Every item with its cost and profit — for taxes pick Jan 1 to Dec 31. Blank dates = everything.</span>
         </div>
       )}
 
@@ -2927,10 +3020,12 @@ function CustomerDashboard({ user, onLogout }) {
 
   useEffect(() => {
     async function load() {
-      // Get customer's orders via the anon key (RLS filters to their orders)
+      // Get customer's orders via the anon key (RLS filters to their orders).
+      // Items list explicit columns: the cost-snapshot columns are revoked for
+      // customer keys, so a * select would be rejected outright.
       const { data } = await supabase
         .from('orders')
-        .select('*, items:order_items(*)')
+        .select('*, items:order_items(product_name, color, size, quantity, unit_price)')
         .order('created_at', { ascending: false });
       setOrders(data || []);
       setLoading(false);
