@@ -878,8 +878,9 @@ function ProductPage() {
   const totalPrice = product.price + (selectedSizeObj?.surcharge || 0);
 
   const handleAdd = () => {
-    if (!selectedSize) return;
-    addToCart(product, currentColor.name, selectedSize, mainImage, selectedSizeObj?.surcharge || 0);
+    // One-size products (hats, bags) have no size options — don't gate on one.
+    if (!selectedSize && product.sizes.length > 0) return;
+    addToCart(product, currentColor.name, selectedSize || 'One Size', mainImage, selectedSizeObj?.surcharge || 0);
   };
 
   return (
