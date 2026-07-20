@@ -31,9 +31,9 @@ One login screen at **/dashadmin**, two worlds:
 - **Order at Cost**: wholesale cart — any product at this login's cost through the normal Stripe checkout (records + auto-fulfills like a retail order).
 - Header shows a **build stamp** (`v-xxxxx`) — read it to know which version a device is running.
 
-## Customer portal (/account) — verified working
+## Customer portal (/account) — reworked 2026-07-20 (email-free auth)
 
-Supabase auth (Sign In / Sign Up / **Magic Link** — buyers get passwordless auto-accounts, so magic link is their path). RLS verified: customers see only their own orders. Fixed 07-15: Site URL was `localhost:3000` (magic links now land on the store), signup-then-buy account linkage.
+Supabase auth, **Sign In / Sign Up only** (Magic Link removed). **Email confirmation is OFF** — signup logs straight in, no email ever (the built-in sender was dead, and `/checkout` is auth-gated, so unconfirmable accounts blocked ALL purchases). **Forgot password?** on Sign In → reset link → set-new-password card; that reset is the ONLY email the store sends, via custom SMTP (Resend, sender `shift@createandsource.com`, configured in Supabase → Auth → Emails). Buyers auto-created at purchase are passwordless — "Forgot password?" is how they claim their account. RLS verified: customers see only their own orders. Fixed 07-15: Site URL was `localhost:3000`, signup-then-buy account linkage.
 
 ## Data (Supabase)
 
@@ -53,7 +53,7 @@ Supabase auth (Sign In / Sign Up / **Magic Link** — buyers get passwordless au
 ## Open items
 
 1. **Hand off staff access**: text the partner the STAFF_KEY password + shift-store.vercel.app/dashadmin.
-2. **Custom SMTP** (e.g. free Resend) so magic links/confirmations send reliably — do before pushing customers to the portal.
+2. ~~Custom SMTP~~ — DONE 2026-07-20 (Resend via `shift@createandsource.com`; only password-reset emails send). Domain verification in Resend was pending at session end — confirm status + one real reset email received.
 3. **First real order**: the checkout→webhook→order pipeline has never fired in production (orders table has zero rows). One cheap live purchase proves the last mile (it will really produce + ship).
 4. ~~Snapshot cost/owner-price onto `order_items` at purchase~~ — DONE 2026-07-20 (+ date-range profit CSV).
 5. Optional hardening: pin `PRINTIFY_SHOP_ID=26536230`; Shopify auto-"delivered" needs a fulfillment read scope on the "SHIFT Order Sync" app.
