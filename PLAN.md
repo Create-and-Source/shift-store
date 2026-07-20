@@ -25,6 +25,7 @@ One login screen at **/dashadmin**, two worlds:
 - **Products**: editable name (→ store), Description button/editor (→ store), per-product price (role's own layer), live profit readout, Hide, category assignment, search.
 - **Bulk pricing bar**: % or $ over cost, "only unpriced"/all/**ticked products** (checkboxes select bulk targets when no category is chosen), optional .99 ending, live example.
 - **Orders**: profit strip (Sales / You earn — role-correct) + per-order "You earn", tracking auto-sync (6h cron + real-time webhooks), manual sync button; "Enable real-time" owner-only.
+- **Profit report CSV** (added 2026-07-20): date-range export on the Orders page — one row per item with sale price, cost, profit, and cost basis, plus totals; each role gets its own numbers. Built for the partner's taxes.
 - **Media**: category photos, per-product mockup upload/reorder/delete.
 - **Subscribers**: the storefront "Join the Movement" form saves to `subscribers`; list + copy-all-emails.
 - **Order at Cost**: wholesale cart — any product at this login's cost through the normal Stripe checkout (records + auto-fulfills like a retail order).
@@ -37,6 +38,8 @@ Supabase auth (Sign In / Sign Up / **Magic Link** — buyers get passwordless au
 ## Data (Supabase)
 
 `orders` + `order_items` + `customers` (RLS: own-rows via `auth_id`), `product_overrides` (image_urls / name / price=retail / description), `owner_prices` (private), `categories` + assignments, `subscribers`, storage bucket `store-media`. SQL files in repo root.
+
+**Cost snapshots (added 2026-07-20, migration run):** the webhook stamps `order_items.cost` (true source cost) + `order_items.owner_price` (private layer) at purchase, so profit reports are exact forever — catalog price changes can't rewrite history. The admin orders API masks per role (staff's `cost` = owner price; `owner_price` stripped). Column-level grants revoke both columns from customer keys — which means **any client-side select on `order_items` must name explicit columns; `select(*)` is permission-denied for anon/authenticated.** Profit views prefer snapshots and fall back to live catalog costs for older orders (flagged "estimated").
 
 ⚠️ **Any new field on `product_overrides` must be carried by EVERY `setOverride` call site** (price/name/photos/description handlers) or edits wipe it.
 
@@ -52,4 +55,5 @@ Supabase auth (Sign In / Sign Up / **Magic Link** — buyers get passwordless au
 1. **Hand off staff access**: text the partner the STAFF_KEY password + shift-store.vercel.app/dashadmin.
 2. **Custom SMTP** (e.g. free Resend) so magic links/confirmations send reliably — do before pushing customers to the portal.
 3. **First real order**: the checkout→webhook→order pipeline has never fired in production (orders table has zero rows). One cheap live purchase proves the last mile (it will really produce + ship).
-4. Optional hardening: snapshot cost/owner-price onto `order_items` at purchase (profit views currently use *current* costs); pin `PRINTIFY_SHOP_ID=26536230`; Shopify auto-"delivered" needs a fulfillment read scope on the "SHIFT Order Sync" app.
+4. ~~Snapshot cost/owner-price onto `order_items` at purchase~~ — DONE 2026-07-20 (+ date-range profit CSV).
+5. Optional hardening: pin `PRINTIFY_SHOP_ID=26536230`; Shopify auto-"delivered" needs a fulfillment read scope on the "SHIFT Order Sync" app.
