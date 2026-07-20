@@ -2871,10 +2871,13 @@ function AdminOrderDetail({ order, onUpdate, onClose }) {
       <div className="admin-detail-section">
         <div className="admin-detail-label">Shipping Address</div>
         <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-          {addr.name && <div>{addr.name}</div>}
+          {addr.name && <div style={{ fontWeight: 600 }}>{addr.name}</div>}
           {addr.line1 && <div>{addr.line1}</div>}
           {addr.line2 && <div>{addr.line2}</div>}
           <div>{[addr.city, addr.state, addr.postal_code].filter(Boolean).join(', ')}</div>
+          {addr.country && <div>{addr.country}</div>}
+          {addr.phone && <div style={{ color: 'var(--gray)' }}>{addr.phone}</div>}
+          {!addr.line1 && !addr.city && <div style={{ color: 'var(--gray)' }}>No address on file</div>}
         </div>
       </div>
 

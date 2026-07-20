@@ -167,6 +167,7 @@ export default async function handler(req, res) {
     const shippingDetails = session.shipping_details || session.shipping || {}
     const shippingAddress = shippingDetails.address || {}
     shippingAddress.name = shippingDetails.name || session.customer_details?.name || ''
+    if (session.customer_details?.phone) shippingAddress.phone = session.customer_details.phone
 
     const customerEmail = session.customer_details?.email || ''
     const customerName = session.customer_details?.name || ''
