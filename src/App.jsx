@@ -11,7 +11,17 @@ function ProductsProvider({ children }) {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [customCategories, setCustomCategories] = useState([]);
+  const [stock, setStock] = useState({});
   const [loading, setLoading] = useState(true);
+
+  // FE blank-level availability — fetched apart from the product feeds so it
+  // never delays first paint; until it lands everything reads as in stock.
+  useEffect(() => {
+    fetch('/api/stock')
+      .then(r => r.json())
+      .then(d => setStock(d.stock || {}))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -68,7 +78,7 @@ function ProductsProvider({ children }) {
   }, []);
 
   return (
-    <ProductsContext.Provider value={{ products, categories, customCategories, loading }}>
+    <ProductsContext.Provider value={{ products, categories, customCategories, stock, loading }}>
       {children}
     </ProductsContext.Provider>
   );
@@ -131,9 +141,12 @@ function CartProvider({ children }) {
   });
   const [cartOpen, setCartOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
 
   useEffect(() => {
     localStorage.setItem('shift-cart', JSON.stringify(cart));
+    // Editing the cart is how a sold-out error gets resolved — reset it.
+    setCheckoutError('');
   }, [cart]);
 
   const addToCart = (product, color, size, image, sizeSurcharge = 0) => {
@@ -188,16 +201,22 @@ function CartProvider({ children }) {
         window.location.href = data.url;
       } else {
         console.error('Checkout error:', data.error);
+        setCheckoutError(
+          data.error === 'sold_out'
+            ? (data.message || 'Something in your cart just sold out — remove it to continue.')
+            : (data.error || 'Checkout failed — please try again.')
+        );
         setCheckingOut(false);
       }
     } catch (err) {
       console.error('Checkout error:', err);
+      setCheckoutError('Checkout failed — please try again.');
       setCheckingOut(false);
     }
   };
 
   return (
-    <CartContext.Provider value={{ cart, cartOpen, setCartOpen, addToCart, updateQty, clearCart, cartCount, cartTotal, checkout, checkingOut }}>
+    <CartContext.Provider value={{ cart, cartOpen, setCartOpen, addToCart, updateQty, clearCart, cartCount, cartTotal, checkout, checkingOut, checkoutError }}>
       {children}
     </CartContext.Provider>
   );
@@ -408,6 +427,8 @@ function Footer() {
 
 function ProductCard({ product, index }) {
   const navigate = useNavigate();
+  const { stock } = useProducts();
+  const out = productSoldOut(stock, product);
   return (
     <motion.div
       className="product-card"
@@ -425,7 +446,7 @@ function ProductCard({ product, index }) {
           loading="lazy"
         />
       </div>
-      {product.badge && <div className="product-card-badge">{product.badge}</div>}
+      {(out || product.badge) && <div className={`product-card-badge${out ? ' soldout' : ''}`}>{out ? 'Sold Out' : product.badge}</div>}
       <div className="product-card-name">{product.name}</div>
       <div className="product-card-price">
         {product.comparePrice && (
@@ -455,6 +476,7 @@ function thumb(url, width) {
 function MarqueeRow({ items, reverse, speed }) {
   const trackRef = useRef(null);
   const navigate = useNavigate();
+  const { stock } = useProducts();
   const st = useRef({ pos: 0, hover: false, dragging: false, moved: false, lastX: 0 });
   const loop = [...items, ...items];
 
@@ -521,7 +543,11 @@ function MarqueeRow({ items, reverse, speed }) {
           >
             <div className="carousel-slide-img glitch-img-wrap">
               <img src={thumb(p.image, 500)} alt={p.name} draggable="false" decoding="async" />
-              {p.badge && <div className="carousel-badge">{p.badge}</div>}
+              {(productSoldOut(stock, p) || p.badge) && (
+                <div className={`carousel-badge${productSoldOut(stock, p) ? ' soldout' : ''}`}>
+                  {productSoldOut(stock, p) ? 'Sold Out' : p.badge}
+                </div>
+              )}
             </div>
             <div className="carousel-slide-info">
               <div className="carousel-slide-name">{p.name}</div>
@@ -852,9 +878,27 @@ const SIZE_ORDER = ['xxs', 'xx-small', 'xs', 'x-small', 's', 'small', 'm', 'medi
 const sizeAbbr = (name) => SIZE_ABBR[String(name).trim().toLowerCase()] || name;
 const sizeRank = (name) => { const i = SIZE_ORDER.indexOf(String(name).trim().toLowerCase()); return i === -1 ? 999 : i; };
 
+// FE blank-level availability, from /api/stock. Only combos FE explicitly
+// reports out of stock are blocked — unknown products/combos stay sellable
+// (fail open), and the checkout API re-checks server-side regardless.
+// Key shape mirrors comboKey() in api/_lib/fulfillengine.js.
+const stockKey = (color, size) => {
+  const norm = v => String(v || '').trim().toLowerCase();
+  const s = norm(size);
+  return `${norm(color)}|${s === 'one size' ? '' : s}`;
+};
+const comboSoldOut = (stock, productId, color, size) =>
+  (stock?.[productId]?.unavailableKeys || []).includes(stockKey(color, size));
+const colorSoldOut = (stock, product, color) => (product.sizes || []).length
+  ? product.sizes.every(s => comboSoldOut(stock, product.id, color, s.name))
+  : comboSoldOut(stock, product.id, color, 'One Size');
+const productSoldOut = (stock, product) =>
+  (product.colors || []).length > 0 && !!stock?.[product.id] &&
+  product.colors.every(c => colorSoldOut(stock, product, c.name));
+
 function ProductPage() {
   const { id } = useParams();
-  const { products, loading } = useProducts();
+  const { products, stock, loading } = useProducts();
   const product = products.find(p => p.id === id);
   const [selectedColor, setSelectedColor] = useState(0);
   const [selectedSize, setSelectedSize] = useState(null);
@@ -884,7 +928,14 @@ function ProductPage() {
   const selectedSizeObj = product.sizes.find(s => s.name === selectedSize);
   const totalPrice = product.price + (selectedSizeObj?.surcharge || 0);
 
+  const allOut = productSoldOut(stock, product);
+  const selectionOut = product.sizes.length
+    ? (selectedSize ? comboSoldOut(stock, product.id, currentColor?.name, selectedSize) : false)
+    : comboSoldOut(stock, product.id, currentColor?.name, 'One Size');
+  const canAdd = !allOut && !selectionOut && (selectedSize || product.sizes.length === 0);
+
   const handleAdd = () => {
+    if (allOut || selectionOut) return;
     // One-size products (hats, bags) have no size options — don't gate on one.
     if (!selectedSize && product.sizes.length > 0) return;
     addToCart(product, currentColor.name, selectedSize || 'One Size', mainImage, selectedSizeObj?.surcharge || 0);
@@ -946,10 +997,13 @@ function ProductPage() {
                 {product.colors.map((c, i) => (
                   <button
                     key={c.name}
-                    className={`color-swatch ${selectedColor === i ? 'active' : ''}`}
+                    className={`color-swatch ${selectedColor === i ? 'active' : ''} ${colorSoldOut(stock, product, c.name) ? 'soldout' : ''}`}
                     style={{ background: c.hex }}
+                    title={colorSoldOut(stock, product, c.name) ? `${c.name} — sold out` : c.name}
                     onClick={() => {
                       setSelectedColor(i);
+                      // A size that's fine in one color can be sold out in another.
+                      if (selectedSize && comboSoldOut(stock, product.id, c.name, selectedSize)) setSelectedSize(null);
                       // Jump the main image to this color's first photo, but keep
                       // every thumbnail in the gallery visible.
                       const firstUrl = (c.images || [])[0]?.url;
@@ -966,23 +1020,27 @@ function ProductPage() {
             <>
               <div className="pdp-label">Size</div>
               <div className="size-options">
-                {[...product.sizes].sort((a, b) => sizeRank(a.name) - sizeRank(b.name)).map(s => (
-                  <button
-                    key={s.name}
-                    className={`size-btn ${selectedSize === s.name ? 'active' : ''}`}
-                    onClick={() => setSelectedSize(s.name)}
-                    title={s.name}
-                  >
-                    <span>{sizeAbbr(s.name)}</span>
-                    {s.surcharge > 0 && <span className="size-surcharge">+${s.surcharge.toFixed(2)}</span>}
-                  </button>
-                ))}
+                {[...product.sizes].sort((a, b) => sizeRank(a.name) - sizeRank(b.name)).map(s => {
+                  const out = comboSoldOut(stock, product.id, currentColor?.name, s.name);
+                  return (
+                    <button
+                      key={s.name}
+                      className={`size-btn ${selectedSize === s.name ? 'active' : ''} ${out ? 'soldout' : ''}`}
+                      disabled={out}
+                      onClick={() => setSelectedSize(s.name)}
+                      title={out ? `${s.name} — sold out` : s.name}
+                    >
+                      <span>{sizeAbbr(s.name)}</span>
+                      {s.surcharge > 0 && !out && <span className="size-surcharge">+${s.surcharge.toFixed(2)}</span>}
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}
 
-          <button className="add-btn" onClick={handleAdd} style={{ opacity: (selectedSize || product.sizes.length === 0) ? 1 : 0.5 }}>
-            {(selectedSize || product.sizes.length === 0) ? 'Add to Cart' : 'Select a Size'} <ArrowRight size={14} />
+          <button className="add-btn" onClick={handleAdd} disabled={allOut || selectionOut} style={{ opacity: canAdd ? 1 : 0.5 }}>
+            {allOut ? 'Sold Out' : selectionOut ? 'Sold Out — Try Another Option' : (selectedSize || product.sizes.length === 0) ? 'Add to Cart' : 'Select a Size'} {canAdd && <ArrowRight size={14} />}
           </button>
         </motion.div>
       </div>
@@ -1173,7 +1231,7 @@ function PolicyPage() {
 const FLAT_SHIPPING = 10;
 
 function CheckoutPage() {
-  const { cart, updateQty, cartTotal, checkout, checkingOut } = useCart();
+  const { cart, updateQty, cartTotal, checkout, checkingOut, checkoutError } = useCart();
   const { products } = useProducts();
   const navigate = useNavigate();
   const [selectedSuggestion, setSelectedSuggestion] = useState(null);
@@ -1278,6 +1336,7 @@ function CheckoutPage() {
                 <span>{hasPrintify && !shipLoading ? 'Total' : 'Estimated Total'}</span>
                 <span>${(cartTotal + (hasPrintify && !shipLoading ? shippingTotal : 0)).toFixed(2)}</span>
               </div>
+              {checkoutError && <div className="ck-error">{checkoutError}</div>}
               <button className="ck-pay-btn" onClick={checkout} disabled={checkingOut}>
                 {checkingOut ? <><Loader size={14} className="spin" /> Processing...</> : <>Pay Now <ArrowRight size={14} /></>}
               </button>
@@ -2437,7 +2496,7 @@ function AdminOrderAtCostPage({ adminPassword }) {
         }),
       });
       const data = await res.json();
-      if (!data.url) throw new Error(data.error || 'Checkout failed');
+      if (!data.url) throw new Error(data.message || data.error || 'Checkout failed');
       window.location.href = data.url;
     } catch (err) {
       setMsg(err.message);
@@ -3009,6 +3068,9 @@ function AdminOrdersPage({ adminPassword, role }) {
                   if (e == null || order.status === 'cancelled') return null;
                   return <div className="admin-order-earn">You earn ${e.toFixed(2)}</div>;
                 })()}
+                {order.fulfillment_error && order.status !== 'cancelled' && (
+                  <div className="admin-fulfill-flag">⚠ Fulfillment issue</div>
+                )}
               </div>
             ))
           )}
@@ -3149,6 +3211,13 @@ function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh, 
 
       <div className="admin-detail-section">
         <div className="admin-detail-label">Fulfillment</div>
+        {order.fulfillment_error && (
+          <div className="admin-fulfill-error">
+            <div className="admin-fulfill-error-title">⚠ Fulfillment issue</div>
+            {order.fulfillment_error}
+            <div className="admin-fulfill-error-hint">A successful Send to Fulfill Engine / Send to Shopify clears this banner.</div>
+          </div>
+        )}
         {order.fe_order_id ? (
           <div style={{ fontSize: 13 }}>Fulfill Engine order: {order.fe_order_id}</div>
         ) : (

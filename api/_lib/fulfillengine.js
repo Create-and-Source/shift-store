@@ -68,6 +68,60 @@ export async function feDebug(items) {
   return { campaignId: FE_CAMPAIGN_ID, products: slim, inventory, prices }
 }
 
+// Stable lookup key for a (color, size) combo. FE's catalog SKU options use
+// the same display names as the shop feed ('Faded Black', 'X-Large');
+// matching is case/space-insensitive. One-size products (hats, bags) carry
+// 'One Size' in our carts but no size in FE — both normalize to ''.
+export function comboKey(color, size) {
+  const norm = v => String(v || '').trim().toLowerCase()
+  const s = norm(size)
+  return `${norm(color)}|${s === 'one size' ? '' : s}`
+}
+
+// Blank-level availability for FE campaign products, per (color, size).
+// The public shop feed carries no stock data at all, and FE ACCEPTS orders
+// for out-of-stock blanks and silently parks them — so this is the only way
+// to know a combo can't be bought. Campaign products resolve to their catalog
+// blanks; the catalog inventory endpoint reports per-SKU isAvailable.
+// Returns { [campaignProductId]: { unavailable, unavailableKeys, combos } }.
+// Only combos FE explicitly reports unavailable are listed — unknown products
+// or combos stay sellable (fail open; an FE hiccup must never hide the store).
+export async function feAvailability(campaignProductIds) {
+  const ids = [...new Set(campaignProductIds)].filter(Boolean)
+  if (!ids.length) return {}
+  const products = await feFetch(`/campaigns/${FE_CAMPAIGN_ID}/products`, {
+    method: 'POST',
+    body: JSON.stringify({ campaignProductIds: ids }),
+  })
+  const list = Array.isArray(products) ? products : []
+  const catalogIds = [...new Set(list.map(p => p.catalogProductId).filter(Boolean))]
+  const byCatalog = new Map()
+  for (let i = 0; i < catalogIds.length; i += 50) { // endpoint caps at 50 ids
+    const inv = await feFetch('/product-catalog/inventory', {
+      method: 'POST',
+      body: JSON.stringify({ productIds: catalogIds.slice(i, i + 50) }),
+    })
+    for (const p of inv?.products || []) byCatalog.set(p.productId, p.skus || [])
+  }
+  const out = {}
+  for (const p of list) {
+    const skus = byCatalog.get(p.catalogProductId)
+    if (!skus) continue
+    const combos = skus.map(s => ({
+      color: s.options?.color || '',
+      size: s.options?.size || '',
+      available: s?.isAvailable !== false,
+    }))
+    const unavailable = combos.filter(c => !c.available).map(({ color, size }) => ({ color, size }))
+    out[p.id] = {
+      unavailable,
+      unavailableKeys: unavailable.map(u => comboKey(u.color, u.size)),
+      combos,
+    }
+  }
+  return out
+}
+
 // The store's items are print-on-demand: campaign variant SKUs are NOT
 // orderable (FE's campaign inventory reports them empty → InvalidSKU on
 // orders). A POD order references the catalog BLANK (catalogProductId, an

@@ -8,7 +8,7 @@ import {
 } from './_lib/printify.js'
 import { shopifyAdminEnabled, createShopifyOrder } from './_lib/shopify.js'
 import { getOwnerPrices } from './_lib/adminRole.js'
-import { feEnabled, createFEOrder } from './_lib/fulfillengine.js'
+import { feEnabled, createFEOrder, feAvailability, comboKey } from './_lib/fulfillengine.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
@@ -104,6 +104,29 @@ async function costSnapshot(host) {
   // Which product ids belong to Fulfill Engine — drives FE order routing.
   const feIds = new Set((a.products || []).map(p => p.id))
   return { costs, ownerPrices, feIds }
+}
+
+// Loud-failure trail: stamped on the order and shown as a red banner in
+// /dashadmin, instead of a fulfillment problem living only in Vercel logs.
+// Appends (a Printify failure must not erase an FE one); cleared by a
+// successful manual resubmit. Fail-soft until supabase-fulfillment-error.sql
+// has run — a missing column only logs.
+async function stampFulfillmentError(orderId, message) {
+  try {
+    const { data } = await supabase
+      .from('orders')
+      .select('fulfillment_error')
+      .eq('id', orderId)
+      .maybeSingle()
+    const combined = [data?.fulfillment_error, message].filter(Boolean).join('\n')
+    const { error } = await supabase
+      .from('orders')
+      .update({ fulfillment_error: combined })
+      .eq('id', orderId)
+    if (error) console.error('fulfillment_error stamp (non-fatal):', error.message)
+  } catch (e) {
+    console.error('fulfillment_error stamp (non-fatal):', e.message)
+  }
 }
 
 export default async function handler(req, res) {
@@ -291,6 +314,7 @@ export default async function handler(req, res) {
       }
     } catch (pfErr) {
       console.error('Printify fulfillment failed (non-fatal):', pfErr.message, pfErr.body || '')
+      await stampFulfillmentError(order.id, `Printify submit FAILED: ${pfErr.message} ${JSON.stringify(pfErr.body || '').slice(0, 300)} — the order was NOT sent to Printify.`)
     }
 
     // ─── Shopify fulfillment ────────────────────────────────────────────
@@ -327,6 +351,7 @@ export default async function handler(req, res) {
       }
     } catch (shErr) {
       console.error('Shopify fulfillment failed (non-fatal):', shErr.message, shErr.body || '')
+      await stampFulfillmentError(order.id, `Shopify submit FAILED: ${shErr.message} ${JSON.stringify(shErr.body || '').slice(0, 300)} — the order was NOT sent to Shopify/Tapstitch; use "Send to Shopify" on the order.`)
     }
 
     // ─── Fulfill Engine fulfillment ─────────────────────────────────────
@@ -336,6 +361,26 @@ export default async function handler(req, res) {
     try {
       const feItems = items.filter(it => snap.feIds?.has(it.productId))
       if (feItems.length && feEnabled()) {
+        // Blank-level stock check BEFORE submitting: FE accepts orders for
+        // out-of-stock blanks and silently parks them in "Processing"
+        // (learned on the 07-20 organic orders). The order is still
+        // submitted — FE produces it when the blank restocks — but the
+        // admin gets a loud banner instead of a silent stall.
+        let oosNote = ''
+        try {
+          const availability = await feAvailability(feItems.map(it => it.productId))
+          const oos = feItems.filter(it =>
+            (availability[it.productId]?.unavailableKeys || []).includes(comboKey(it.color, it.size))
+          )
+          if (oos.length) {
+            oosNote = `Fulfill Engine: OUT OF STOCK at purchase — ${oos
+              .map(it => [it.name, [it.color, it.size].filter(Boolean).join(' / ')].filter(Boolean).join(' — '))
+              .join('; ')}. FE accepted the order but will hold production until the blank restocks; check it in FE.`
+          }
+        } catch (invErr) {
+          console.error('FE stock check skipped (non-fatal):', invErr.message)
+        }
+
         const feOrder = await createFEOrder({
           externalId: order.id,
           items: feItems.map(it => ({
@@ -359,9 +404,11 @@ export default async function handler(req, res) {
             .eq('id', order.id)
           if (linkErr) console.error('FE backlink (non-fatal):', linkErr.message)
         }
+        if (oosNote) await stampFulfillmentError(order.id, oosNote)
       }
     } catch (feErr) {
       console.error('Fulfill Engine fulfillment failed (non-fatal):', feErr.message, JSON.stringify(feErr.body || '').slice(0, 500))
+      await stampFulfillmentError(order.id, `Fulfill Engine submit FAILED: ${feErr.message} ${JSON.stringify(feErr.body || '').slice(0, 300)} — the order was NOT sent; use "Send to Fulfill Engine" on the order.`)
     }
   }
 

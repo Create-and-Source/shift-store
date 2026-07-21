@@ -1286,6 +1286,54 @@ img { max-width: 100%; display: block; }
   box-shadow: 0 0 30px rgba(229,0,0,0.3);
 }
 
+.add-btn:disabled {
+  background: var(--gray-dim);
+  color: var(--gray);
+  cursor: not-allowed;
+}
+.add-btn:disabled:hover { background: var(--gray-dim); box-shadow: none; }
+
+/* ═══ SOLD OUT (FE blank-level stock, /api/stock) ═══ */
+.size-btn.soldout,
+.size-btn:disabled {
+  color: var(--gray);
+  border-color: var(--gray-dim);
+  text-decoration: line-through;
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.size-btn.soldout:hover { border-color: var(--gray-dim); }
+
+/* Diagonal slash across a sold-out colorway */
+.color-swatch.soldout {
+  position: relative;
+  opacity: 0.5;
+  overflow: hidden;
+}
+.color-swatch.soldout::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent calc(50% - 1px), rgba(255,255,255,0.85) calc(50% - 1px), rgba(255,255,255,0.85) calc(50% + 1px), transparent calc(50% + 1px));
+}
+
+.product-card-badge.soldout,
+.carousel-badge.soldout {
+  color: var(--gray);
+  border-color: var(--gray-dim);
+  background: rgba(5,5,5,0.8);
+}
+
+.ck-error {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--red);
+  border: 1px solid var(--red-dim);
+  background: rgba(229,0,0,0.08);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
 /* ═══ CART DRAWER ═══ */
 .cart-overlay {
   position: fixed; inset: 0;
@@ -2812,6 +2860,34 @@ img { max-width: 100%; display: block; }
   font-size: 11px;
   font-weight: 700;
   color: #1f9d55;
+}
+.admin-fulfill-flag {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e53e3e;
+}
+.admin-fulfill-error {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9b2c2c;
+  background: #fff5f5;
+  border: 1px solid #feb2b2;
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.admin-fulfill-error-title {
+  font-weight: 800;
+  color: #e53e3e;
+  margin-bottom: 4px;
+}
+.admin-fulfill-error-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #a06161;
 }
 .admin-desc-btn.has-desc {
   border-color: var(--red);

@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { printifyEnabled, getPrintifyStandardShipping } from './_lib/printify.js'
+import { feEnabled, feAvailability, comboKey } from './_lib/fulfillengine.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
@@ -18,6 +19,31 @@ export default async function handler(req, res) {
 
     if (!items || !items.length) {
       return res.status(400).json({ error: 'No items provided' })
+    }
+
+    // Sold-out guard for Fulfill Engine items — the storefront greys these
+    // out, but a stale page (or a race) can still submit one, and FE accepts
+    // orders for out-of-stock blanks and silently parks them. Fail-open: an
+    // FE error skips the guard rather than blocking checkout.
+    try {
+      const feItems = items.filter(i => i.source === 'fulfillengine')
+      if (feItems.length && feEnabled()) {
+        const availability = await feAvailability(feItems.map(i => i.productId))
+        const soldOut = feItems.filter(i =>
+          (availability[i.productId]?.unavailableKeys || []).includes(comboKey(i.color, i.size))
+        )
+        if (soldOut.length) {
+          return res.status(409).json({
+            error: 'sold_out',
+            soldOut: soldOut.map(i => ({ name: i.name, color: i.color, size: i.size })),
+            message: `Just sold out: ${soldOut
+              .map(i => [i.name, [i.color, i.size].filter(Boolean).join(' / ')].filter(Boolean).join(' — '))
+              .join('; ')}. Remove it from your cart to continue.`,
+          })
+        }
+      }
+    } catch (stockErr) {
+      console.error('Checkout stock guard skipped (fail-open):', stockErr.message)
     }
 
     const lineItems = items.map(item => {

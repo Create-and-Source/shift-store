@@ -75,6 +75,13 @@ export default async function handler(req, res) {
           .eq('id', orderId)
         if (linkErr) console.error('FE backlink (non-fatal):', linkErr.message)
       }
+      // A successful manual (re)send resolves the loud-failure banner.
+      // Separate call so a missing column can't take the backlink down with it.
+      const { error: clearErr } = await supabase
+        .from('orders')
+        .update({ fulfillment_error: null })
+        .eq('id', orderId)
+      if (clearErr) console.error('fulfillment_error clear (non-fatal):', clearErr.message)
     }
 
     return res.status(200).json({ ok: true, validated: !!validate, feItems: feItems.length, result })

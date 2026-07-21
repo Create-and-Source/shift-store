@@ -1,0 +1,11 @@
+-- Loud fulfillment-failure trail (added 2026-07-21, after an out-of-stock FE
+-- blank left a paid order silently parked in FE's "Processing").
+-- Stamped by the Stripe webhook when a provider submit fails, or when an FE
+-- item was out of stock at purchase (FE accepts those orders and holds
+-- production). Shown as a red banner on the order in /dashadmin; cleared by a
+-- successful manual resubmit (Send to Fulfill Engine / Send to Shopify).
+--
+-- Deliberately NOT revoked from customer keys: the /account portal selects
+-- * on orders (unlike order_items), and the text contains nothing sensitive
+-- (no costs — just provider + product names).
+alter table orders add column if not exists fulfillment_error text;
