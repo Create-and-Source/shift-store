@@ -128,6 +128,12 @@ export default async function handler(req, res) {
     event = JSON.parse(buf.toString())
   }
 
+  // Checkouts the owner deliberately abandoned (refunded test purchases) —
+  // acknowledged with 200 so Stripe stops retrying, never recorded/fulfilled.
+  const ABANDONED_SESSIONS = new Set([
+    'cs_live_b1sUmJaNERF4d9MEHcHFARmTLI2m2mtMNMLwd8jxbvYc6Caudn7KS1CzcW',
+  ])
+
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object
 
@@ -135,6 +141,11 @@ export default async function handler(req, res) {
     if (session.metadata?.store !== 'shift') {
       console.log('Ignoring non-Shift checkout:', session.id)
       return res.status(200).json({ received: true, skipped: true })
+    }
+
+    if (ABANDONED_SESSIONS.has(session.id)) {
+      console.log('Ignoring abandoned checkout:', session.id)
+      return res.status(200).json({ received: true, abandoned: true })
     }
 
     // Idempotency check
