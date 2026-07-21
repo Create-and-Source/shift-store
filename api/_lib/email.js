@@ -1,5 +1,6 @@
-// Transactional email via Resend's HTTP API (the domain createandsource.com
-// is already verified in Resend for the Supabase reset-password SMTP).
+// Transactional email via Resend's HTTP API, sent from the store's own
+// domain (shiftapparelco.com must be Verified in Resend — Squarespace DNS,
+// same one-click integration used for createandsource.com on 07-20).
 // Everything no-ops until RESEND_API_KEY is set in Vercel — senders log and
 // move on; email must never block an order or a tracking write.
 //
@@ -8,7 +9,7 @@
 // Both are deduped via timestamp columns on orders (supabase-email-log.sql).
 import { createClient } from '@supabase/supabase-js'
 
-const FROM = 'SHIFT <shift@createandsource.com>'
+const FROM = 'SHIFT <shift@shiftapparelco.com>'
 const STORE_URL = 'https://shiftapparelco.com'
 
 const supabase = createClient(
@@ -53,7 +54,7 @@ ${inner}
 </td></tr>
 <tr><td style="padding:18px 32px;border-top:1px solid #eeeeee;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#999999;">
   Life Keeps Moving — <a href="${STORE_URL}" style="color:#999999;">shiftapparelco.com</a><br/>
-  Questions? Reply to this email or write to shift@createandsource.com.
+  Questions? Reply to this email — shift@shiftapparelco.com.
 </td></tr>
 </table>
 </td></tr></table></body></html>`
