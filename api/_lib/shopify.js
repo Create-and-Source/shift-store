@@ -258,30 +258,56 @@ mutation orderCreate($order: OrderCreateOrderInput!) {
   }
 }`
 
+const DRAFT_ORDER_CREATE = `
+mutation draftOrderCreate($input: DraftOrderInput!) {
+  draftOrderCreate(input: $input) {
+    userErrors { field message }
+    draftOrder { id }
+  }
+}`
+
+const DRAFT_ORDER_COMPLETE = `
+mutation draftOrderComplete($id: ID!) {
+  draftOrderComplete(id: $id) {
+    userErrors { field message }
+    draftOrder { order { id name } }
+  }
+}`
+
 // Create a PAID order in the Shopify admin so it can be fulfilled there.
 // lineItems: [{ variantId (gid://shopify/ProductVariant/...), quantity }]
 export async function createShopifyOrder({ email, lineItems, shippingAddress }) {
-  const order = {
-    financialStatus: 'PAID',
-    // requiresShipping must be explicit — API-created orders default to
-    // "Shipping not required", which makes Tapstitch/POD apps skip them.
-    lineItems: lineItems.map(li => ({ variantId: li.variantId, quantity: li.quantity, requiresShipping: true })),
-    shippingLines: [{
-      title: 'Standard Shipping',
-      priceSet: { shopMoney: { amount: '0.00', currencyCode: 'USD' } },
-    }],
+  // Draft order → complete: the SAME path as the admin "Create order" button,
+  // so the resulting order carries Shopify's native channel stamp. Tapstitch
+  // only imports orders from native channels — direct orderCreate orders
+  // (custom-app channel) are silently ignored by it. Requires the
+  // write_draft_orders scope on the SHIFT Order Sync app.
+  const input = {
+    lineItems: lineItems.map(li => ({ variantId: li.variantId, quantity: li.quantity })),
+    shippingLine: { title: 'Standard Shipping', price: '0.00' },
   }
-  if (email) order.email = email
-  if (shippingAddress) order.shippingAddress = toShopifyAddress(shippingAddress)
+  if (email) input.email = email
+  if (shippingAddress) input.shippingAddress = toShopifyAddress(shippingAddress)
 
-  const data = await adminGql(ORDER_CREATE, { order })
-  const userErrors = data?.orderCreate?.userErrors || []
-  if (userErrors.length) {
-    const err = new Error('Shopify orderCreate: ' + userErrors.map(e => e.message).join('; '))
-    err.body = userErrors
+  const created = await adminGql(DRAFT_ORDER_CREATE, { input })
+  const createErrors = created?.draftOrderCreate?.userErrors || []
+  if (createErrors.length) {
+    const err = new Error('Shopify draftOrderCreate: ' + createErrors.map(e => e.message).join('; '))
+    err.body = createErrors
     throw err
   }
-  return data?.orderCreate?.order
+  const draftId = created?.draftOrderCreate?.draftOrder?.id
+  if (!draftId) throw new Error('Shopify draftOrderCreate returned no draft id')
+
+  // Completing without paymentPending marks the order paid.
+  const done = await adminGql(DRAFT_ORDER_COMPLETE, { id: draftId })
+  const completeErrors = done?.draftOrderComplete?.userErrors || []
+  if (completeErrors.length) {
+    const err = new Error('Shopify draftOrderComplete: ' + completeErrors.map(e => e.message).join('; '))
+    err.body = completeErrors
+    throw err
+  }
+  return done?.draftOrderComplete?.draftOrder?.order
 }
 
 // ─── Admin API — tracking lookup ────────────────────────────────────────
