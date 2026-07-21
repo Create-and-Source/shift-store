@@ -88,8 +88,15 @@ function AuthProvider({ children }) {
       setUser(session?.user || null);
       setLoading(false);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null);
+      // Reset-email links can land on ANY page (Supabase falls back to the
+      // Site URL) — flag the recovery and carry it to /account, where the
+      // set-new-password card lives.
+      if (event === 'PASSWORD_RECOVERY') {
+        sessionStorage.setItem('shift-recovery', '1');
+        if (window.location.pathname !== '/account') window.location.assign('/account');
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -3040,7 +3047,8 @@ function AccountPage() {
   // The reset link in the email lands the user back here with a recovery
   // session — show the set-new-password card instead of the dashboard. The
   // hash check catches a mid-load arrival; the auth event is the backstop.
-  const [recovery, setRecovery] = useState(() => window.location.hash.includes('type=recovery'));
+  const [recovery, setRecovery] = useState(() =>
+    window.location.hash.includes('type=recovery') || sessionStorage.getItem('shift-recovery') === '1');
   const [newPassword, setNewPassword] = useState('');
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
@@ -3087,7 +3095,7 @@ function AccountPage() {
     if (newPassword.length < 8) { setError('Password must be at least 8 characters'); return; }
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) setError(error.message);
-    else setRecovery(false);
+    else { sessionStorage.removeItem('shift-recovery'); setRecovery(false); }
   };
 
   if (loading) return <div style={{ padding: '200px 0', textAlign: 'center' }}><Loader size={24} className="spin" /></div>;
