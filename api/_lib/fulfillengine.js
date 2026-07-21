@@ -81,8 +81,11 @@ export async function createFEOrder({ externalId, items, address, email, validat
     declaredValue: it.price,
   }))
 
+  // No campaignId on the order — FE docs: "omitted for most API orders"
+  // (account-level). The id that field wants is the store-admin-page id, NOT
+  // the storefront feed's campaignId; sending the wrong one → InvalidSKU
+  // "ensure the order is using the correct campaign".
   const body = {
-    campaignId: FE_CAMPAIGN_ID,
     customId: externalId,
     customIdIsUniqueKey: true,
     customerEmailAddress: email || undefined,
