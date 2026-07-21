@@ -1,10 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 import { printifyEnabled, getPrintifyOrder, printifyTrackingFrom } from './_lib/printify.js'
 import { shopifyAdminEnabled, getShopifyOrderTracking } from './_lib/shopify.js'
+import { feEnabled, getFEOrderTracking } from './_lib/fulfillengine.js'
+import { sendShippedEmailOnce } from './_lib/email.js'
 
-// Polls Printify + Shopify for tracking on in-flight orders and writes it back
-// onto the Supabase order (tracking_number/url + status → shipped), so tracking
-// flows automatically to both the admin and the customer "My Orders" dashboard.
+// Polls Printify + Shopify + Fulfill Engine for tracking on in-flight orders
+// and writes it back onto the Supabase order (tracking_number/url + status →
+// shipped), so tracking flows automatically to both the admin and the customer
+// "My Orders" dashboard. Fresh tracking also fires the shipped email (once).
 //
 // Triggered two ways:
 //   • Vercel Cron (see vercel.json) on a schedule.
@@ -55,8 +58,10 @@ export default async function handler(req, res) {
         tracking = printifyTrackingFrom(await getPrintifyOrder(o.printify_order_id))
       } else if (o.shopify_order_id && shopifyAdminEnabled()) {
         tracking = await getShopifyOrderTracking(o.shopify_order_id)
+      } else if (o.fe_order_id && feEnabled()) {
+        tracking = await getFEOrderTracking(o.fe_order_id)
       } else {
-        continue // no provider backlink to look up (e.g. Fulfill Engine order)
+        continue // no provider backlink to look up
       }
     } catch (err) {
       details.push({ id: o.id, error: err.message })
@@ -73,7 +78,11 @@ export default async function handler(req, res) {
         })
         .eq('id', o.id)
       if (upErr) details.push({ id: o.id, error: upErr.message })
-      else { updated++; details.push({ id: o.id, tracking: tracking.number }) }
+      else {
+        updated++
+        details.push({ id: o.id, tracking: tracking.number })
+        await sendShippedEmailOnce(o.id)
+      }
     }
   }
 

@@ -9,6 +9,7 @@ import {
 import { shopifyAdminEnabled, createShopifyOrder } from './_lib/shopify.js'
 import { getOwnerPrices } from './_lib/adminRole.js'
 import { feEnabled, createFEOrder, feAvailability, comboKey } from './_lib/fulfillengine.js'
+import { emailEnabled, sendEmail, orderConfirmationHtml } from './_lib/email.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
@@ -273,6 +274,37 @@ export default async function handler(req, res) {
     }
 
     console.log('Order created:', order.id, 'for', customerEmail)
+
+    // ─── Order confirmation email ───────────────────────────────────────
+    // Sent as soon as the order is recorded — before the fulfillment legs,
+    // so a provider hiccup never costs the customer their receipt.
+    // Best-effort; a missing RESEND_API_KEY or missing stamp column only logs.
+    try {
+      if (customerEmail && emailEnabled()) {
+        const result = await sendEmail({
+          to: customerEmail,
+          subject: `Order confirmed — #${order.id.slice(0, 8)} · SHIFT`,
+          html: orderConfirmationHtml({
+            orderId: order.id,
+            items,
+            subtotal,
+            shipping: total - subtotal,
+            total,
+            address: shippingAddress,
+          }),
+        })
+        if (result.error) console.error('Confirmation email (non-fatal):', result.error)
+        if (result.ok) {
+          const { error: stampErr } = await supabase
+            .from('orders')
+            .update({ confirmation_email_at: new Date().toISOString() })
+            .eq('id', order.id)
+          if (stampErr) console.error('Confirmation stamp (non-fatal):', stampErr.message)
+        }
+      }
+    } catch (mailErr) {
+      console.error('Confirmation email (non-fatal):', mailErr.message)
+    }
 
     // ─── Printify fulfillment ───────────────────────────────────────────
     // Reassemble the chunked routing (pf0..pfN) set by create-checkout and,

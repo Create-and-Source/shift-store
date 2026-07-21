@@ -3310,6 +3310,8 @@ function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh, 
       <div style={{ fontSize: 11, color: 'var(--gray)', marginTop: 16 }}>
         Created: {new Date(order.created_at).toLocaleString()}<br />
         Updated: {new Date(order.updated_at).toLocaleString()}
+        {order.confirmation_email_at && <><br />Confirmation email sent: {new Date(order.confirmation_email_at).toLocaleString()}</>}
+        {order.shipped_email_at && <><br />Shipped email sent: {new Date(order.shipped_email_at).toLocaleString()}</>}
       </div>
     </div>
   );

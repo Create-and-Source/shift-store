@@ -36,6 +36,19 @@ export async function testFEAuth() {
   return feFetch('/authentication-test')
 }
 
+// Tracking for a submitted FE order (the id createFEOrder returned).
+// Shipments carry trackingNumber/trackingUrl once FE ships; returns
+// { number, url } for the first tracked, non-canceled shipment, else null.
+export async function getFEOrderTracking(feOrderId) {
+  const shipments = await feFetch(`/orders/${feOrderId}/shipments`)
+  for (const s of Array.isArray(shipments) ? shipments : []) {
+    if (s?.trackingNumber && s.status !== 'canceled') {
+      return { number: s.trackingNumber, url: s.trackingUrl || null }
+    }
+  }
+  return null
+}
+
 // items: [{ productId, color, size, qty, price }] — FE campaign products only.
 // Diagnostic bundle: the campaign's products/variants/SKUs as FE sees them,
 // FE's own per-SKU validity check (campaign inventory), and account prices.

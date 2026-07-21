@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
+import { sendShippedEmailOnce } from './email.js'
 
 // Shared bits for the tracking webhooks + poller.
 
@@ -76,5 +77,6 @@ export async function saveTrackingByColumn(column, value, tracking, targetStatus
 
   const { error: upErr } = await supabaseAdmin.from('orders').update(updates).eq('id', order.id)
   if (upErr) return { error: upErr.message }
+  if (updates.tracking_number) await sendShippedEmailOnce(order.id)
   return { orderId: order.id, ...updates }
 }

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
+import { sendShippedEmailOnce } from '../_lib/email.js'
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
@@ -170,6 +171,10 @@ export default async function handler(req, res) {
       console.error('Order update error:', error)
       return res.status(500).json({ error: error.message })
     }
+
+    // Manually entered tracking fires the shipped email too (deduped —
+    // it won't re-send if a webhook or the poller already did).
+    if (updates.tracking_number) await sendShippedEmailOnce(orderId)
 
     return res.status(200).json(data)
   }
