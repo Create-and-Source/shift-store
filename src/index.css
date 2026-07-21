@@ -1041,13 +1041,14 @@ img { max-width: 100%; display: block; }
   color: var(--gray);
 }
 
+.footer-credit { color: var(--white); }
 .footer-credit a {
-  color: var(--gray);
+  color: var(--white);
   text-decoration: underline;
   text-underline-offset: 2px;
   transition: color 0.2s;
 }
-.footer-credit a:hover { color: var(--white); }
+.footer-credit a:hover { color: var(--red); }
 
 /* ═══ SHOP PAGE ═══ */
 .shop-header {
