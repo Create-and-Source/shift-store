@@ -2663,6 +2663,15 @@ function AdminOrdersPage({ adminPassword, role }) {
 
   useEffect(() => { fetchOrders(); }, [filter]);
 
+  // Keep the open detail panel in sync after a refresh (recovered address,
+  // new fulfillment backlinks) — orders are replaced wholesale on fetch.
+  useEffect(() => {
+    if (selected) {
+      const fresh = orders.find(o => o.id === selected.id);
+      if (fresh) setSelected(fresh);
+    }
+  }, [orders]);
+
   // Pull the latest tracking from Printify + Shopify onto in-flight orders.
   const syncTracking = async () => {
     setSyncing(true); setSyncMsg('');
@@ -2815,22 +2824,65 @@ function AdminOrdersPage({ adminPassword, role }) {
           )}
         </div>
 
-        {selected && <AdminOrderDetail order={selected} onUpdate={updateOrder} onClose={() => setSelected(null)} />}
+        {selected && <AdminOrderDetail order={selected} onUpdate={updateOrder} onClose={() => setSelected(null)} adminPassword={adminPassword} onRefresh={fetchOrders} />}
       </div>
     </>
   );
 }
 
-function AdminOrderDetail({ order, onUpdate, onClose }) {
+function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh }) {
   const [tracking, setTracking] = useState(order.tracking_number || '');
   const [trackingUrl, setTrackingUrl] = useState(order.tracking_url || '');
   const [notes, setNotes] = useState(order.admin_notes || '');
+  const [busy, setBusy] = useState(false);
+  const [fulfillMsg, setFulfillMsg] = useState('');
 
   useEffect(() => {
     setTracking(order.tracking_number || '');
     setTrackingUrl(order.tracking_url || '');
     setNotes(order.admin_notes || '');
+    setFulfillMsg('');
   }, [order.id]);
+
+  // Pull the address from the order's Stripe session — for orders recorded
+  // before the webhook read the right Stripe field.
+  const recoverAddress = async () => {
+    setBusy(true); setFulfillMsg('');
+    try {
+      const res = await fetch('/api/admin/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+        body: JSON.stringify({ action: 'recoverAddress', orderId: order.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Recovery failed');
+      setFulfillMsg('Address recovered from Stripe.');
+      onRefresh?.();
+    } catch (err) {
+      setFulfillMsg(err.message);
+    }
+    setBusy(false);
+  };
+
+  // Dry-run validate against Fulfill Engine, then really submit.
+  const sendToFE = async () => {
+    setBusy(true); setFulfillMsg('Validating with Fulfill Engine…');
+    try {
+      const call = (validate) => fetch('/api/admin/fe-submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+        body: JSON.stringify({ orderId: order.id, validate }),
+      }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error + (d.detail ? ' — ' + JSON.stringify(d.detail).slice(0, 300) : '')); return d; });
+      await call(true);
+      setFulfillMsg('Validated ✓ — submitting…');
+      const real = await call(false);
+      setFulfillMsg(`Sent to Fulfill Engine ✓ (${real.feItems} item${real.feItems === 1 ? '' : 's'}). It will produce and ship.`);
+      onRefresh?.();
+    } catch (err) {
+      setFulfillMsg(err.message);
+    }
+    setBusy(false);
+  };
 
   const addr = order.shipping_address || {};
   const statusColors = { new: '#e53e3e', processing: '#dd6b20', shipped: '#3182ce', delivered: '#38a169', cancelled: '#718096' };
@@ -2879,6 +2931,25 @@ function AdminOrderDetail({ order, onUpdate, onClose }) {
           {addr.phone && <div style={{ color: 'var(--gray)' }}>{addr.phone}</div>}
           {!addr.line1 && !addr.city && <div style={{ color: 'var(--gray)' }}>No address on file</div>}
         </div>
+        {!addr.line1 && !addr.city && (
+          <button className="admin-action-btn" style={{ marginTop: 8 }} onClick={recoverAddress} disabled={busy}>
+            Recover address from Stripe
+          </button>
+        )}
+      </div>
+
+      <div className="admin-detail-section">
+        <div className="admin-detail-label">Fulfillment</div>
+        {order.fe_order_id ? (
+          <div style={{ fontSize: 13 }}>Fulfill Engine order: {order.fe_order_id}</div>
+        ) : (
+          <button className="admin-action-btn" onClick={sendToFE} disabled={busy}>
+            Send to Fulfill Engine
+          </button>
+        )}
+        {order.printify_order_id && <div style={{ fontSize: 13, marginTop: 6 }}>Printify order: {order.printify_order_id}</div>}
+        {order.shopify_order_id && <div style={{ fontSize: 13, marginTop: 6 }}>Shopify order: {order.shopify_order_id}</div>}
+        {fulfillMsg && <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 8 }}>{fulfillMsg}</div>}
       </div>
 
       <div className="admin-detail-section">

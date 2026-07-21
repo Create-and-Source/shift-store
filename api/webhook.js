@@ -8,6 +8,7 @@ import {
 } from './_lib/printify.js'
 import { shopifyAdminEnabled, createShopifyOrder } from './_lib/shopify.js'
 import { getOwnerPrices } from './_lib/adminRole.js'
+import { feEnabled, createFEOrder } from './_lib/fulfillengine.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
@@ -100,7 +101,9 @@ async function costSnapshot(host) {
   for (const p of [...(a.products || []), ...(b.products || []), ...(c.products || [])]) {
     if (p?.id != null && p.price != null) costs[p.id] = Number(p.price)
   }
-  return { costs, ownerPrices }
+  // Which product ids belong to Fulfill Engine — drives FE order routing.
+  const feIds = new Set((a.products || []).map(p => p.id))
+  return { costs, ownerPrices, feIds }
 }
 
 export default async function handler(req, res) {
@@ -164,7 +167,10 @@ export default async function handler(req, res) {
         size: orderItems[idx]?.s || '',
       }))
 
-    const shippingDetails = session.shipping_details || session.shipping || {}
+    // Newer Stripe API versions moved shipping onto collected_information —
+    // the legacy top-level fields are checked as fallbacks for old sessions.
+    const shippingDetails = session.collected_information?.shipping_details
+      || session.shipping_details || session.shipping || {}
     const shippingAddress = shippingDetails.address || {}
     shippingAddress.name = shippingDetails.name || session.customer_details?.name || ''
     if (session.customer_details?.phone) shippingAddress.phone = session.customer_details.phone
@@ -310,6 +316,41 @@ export default async function handler(req, res) {
       }
     } catch (shErr) {
       console.error('Shopify fulfillment failed (non-fatal):', shErr.message, shErr.body || '')
+    }
+
+    // ─── Fulfill Engine fulfillment ─────────────────────────────────────
+    // FE items are identified by membership in the FE catalog (already
+    // fetched for the cost snapshot). Best-effort like the others: no-ops
+    // until FE_API_KEY is set, never blocks the 200.
+    try {
+      const feItems = items.filter(it => snap.feIds?.has(it.productId))
+      if (feItems.length && feEnabled()) {
+        const feOrder = await createFEOrder({
+          externalId: order.id,
+          items: feItems.map(it => ({
+            productId: it.productId,
+            color: it.color,
+            size: it.size,
+            qty: it.qty,
+            price: it.price,
+          })),
+          address: shippingAddress,
+          email: customerEmail,
+        })
+        const feId = String(feOrder?.id || feOrder?.orderId || '')
+        console.log('Fulfill Engine order submitted:', feId, 'for order', order.id)
+
+        // Best-effort backlink; ignore if the column doesn't exist yet.
+        if (feId) {
+          const { error: linkErr } = await supabase
+            .from('orders')
+            .update({ fe_order_id: feId })
+            .eq('id', order.id)
+          if (linkErr) console.error('FE backlink (non-fatal):', linkErr.message)
+        }
+      }
+    } catch (feErr) {
+      console.error('Fulfill Engine fulfillment failed (non-fatal):', feErr.message, JSON.stringify(feErr.body || '').slice(0, 500))
     }
   }
 

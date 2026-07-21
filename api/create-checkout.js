@@ -110,6 +110,7 @@ export default async function handler(req, res) {
       payment_method_types: ['card'],
       line_items: lineItems,
       shipping_address_collection: { allowed_countries: ['US'] },
+      phone_number_collection: { enabled: true },
       ...(customerEmail ? { customer_email: customerEmail } : {}),
       success_url: `${origin}/order-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/checkout`,
