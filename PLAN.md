@@ -53,7 +53,7 @@ Supabase auth, **Sign In / Sign Up only** (Magic Link removed). **Email confirma
 ## Open items
 
 1. **Hand off staff access**: text the partner the STAFF_KEY password + shift-store.vercel.app/dashadmin.
-2. ~~Custom SMTP~~ — DONE 2026-07-20 (Resend via `shift@createandsource.com`; only password-reset emails send). Domain verification in Resend was pending at session end — confirm status + one real reset email received.
+2. ~~Custom SMTP~~ — DONE + PROVEN 2026-07-20: reset email sends via Resend (`SHIFT <shift@createandsource.com>`, smtp.resend.com:587, user `resend`). ⚠️ Gotcha that cost an hour: the Supabase SMTP form **drops the stored password when you save any other change** — re-paste the Resend API key on EVERY save of that form. Also: Resend sends fail silently-ish (auth 500) until the domain is Verified in Resend (createandsource.com verified 07-20 via the Squarespace integration).
 3. **First real order**: the checkout→webhook→order pipeline has never fired in production (orders table has zero rows). One cheap live purchase proves the last mile (it will really produce + ship).
 4. ~~Snapshot cost/owner-price onto `order_items` at purchase~~ — DONE 2026-07-20 (+ date-range profit CSV).
 5. Optional hardening: pin `PRINTIFY_SHOP_ID=26536230`; Shopify auto-"delivered" needs a fulfillment read scope on the "SHIFT Order Sync" app.
