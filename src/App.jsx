@@ -2675,13 +2675,14 @@ function AdminOrdersPage({ adminPassword, role }) {
       if (o.status === 'cancelled') continue;
       const ws = weekStart(o.created_at);
       let w = weeks.get(ws.getTime());
-      if (!w) weeks.set(ws.getTime(), w = { start: ws, items: 0, shipping: 0, orders: 0, estimated: 0, unknown: 0 });
+      if (!w) weeks.set(ws.getTime(), w = { start: ws, items: 0, retail: 0, shipping: 0, orders: 0, estimated: 0, unknown: 0 });
       w.orders++;
       w.shipping += Number(o.shipping_cost ?? (o.total - o.subtotal)) || 0;
       for (const it of o.items || []) {
         const p = itemPayable(it);
         if (p == null) { w.unknown++; continue; }
         w.items += p.amount;
+        w.retail += Number(it.unit_price) * (it.quantity || 1);
         if (!p.exact) w.estimated++;
       }
     }
@@ -2924,7 +2925,7 @@ function AdminOrdersPage({ adminPassword, role }) {
             <span className="admin-settle-hint">
               {role === 'owner'
                 ? 'Her cost on every item + shipping collected, grouped by payout week (Fri–Thu).'
-                : 'Your cost on every item + the shipping your customers paid — Create & Source fronts the production and shipping bills. Pay each amount on its Friday, when that week’s Stripe payout lands.'}
+                : 'Your cost on every item + the shipping your customers paid — Create & Source fronts the production and shipping bills. Pay each amount on its Friday, when that week’s Stripe payout lands. “You keep” is before Stripe’s card fees.'}
             </span>
           </div>
           {settlementWeeks.map(w => {
@@ -2939,7 +2940,7 @@ function AdminOrdersPage({ adminPassword, role }) {
                   <strong style={open ? { color: '#dd6b20' } : undefined}>${(w.items + w.shipping).toFixed(2)}</strong>
                 </div>
                 <span className="admin-settle-detail">
-                  {fmt(w.start)} – {fmt(end)} · {w.orders} order{w.orders === 1 ? '' : 's'} · ${w.items.toFixed(2)} product + ${w.shipping.toFixed(2)} shipping
+                  {fmt(w.start)} – {fmt(end)} · {w.orders} order{w.orders === 1 ? '' : 's'} · ${w.items.toFixed(2)} product + ${w.shipping.toFixed(2)} shipping · customers paid ${(w.retail + w.shipping).toFixed(2)}, {role === 'owner' ? 'she keeps' : 'you keep'} ${(w.retail - w.items).toFixed(2)}
                   {open ? ' · week still open — final Thursday night' : ''}
                   {w.estimated > 0 ? ` · ${w.estimated} item(s) at current catalog cost (pre-snapshot order)` : ''}
                   {w.unknown > 0 ? ` · ${w.unknown} item(s) missing a cost — not included` : ''}
