@@ -37,16 +37,46 @@ export async function testFEAuth() {
 }
 
 // items: [{ productId, color, size, qty, price }] — FE campaign products only.
-// The API resolves the variant from campaignProductId + productColor/productSize,
-// so no SKU mapping is needed. validateOnly hits the dry-run endpoint: full
-// validation, nothing produced.
+// FE requires a real SKU per order item ("All order item groups must include
+// one of: SKU, GTIN, CatalogProductId, or VendorSKU") — resolve each item's
+// variant SKU from the authenticated campaign catalog by color + size.
+async function resolveSkus(items) {
+  const ids = [...new Set(items.map(it => it.productId))]
+  const products = await feFetch(`/campaigns/${FE_CAMPAIGN_ID}/products`, {
+    method: 'POST',
+    body: JSON.stringify({ campaignProductIds: ids }),
+  })
+  const byId = new Map((Array.isArray(products) ? products : []).map(p => [p.id, p]))
+  return items.map(it => {
+    const p = byId.get(it.productId)
+    if (!p) throw new Error(`Product ${it.productId} not found in the FE campaign`)
+    const variants = p.variants || []
+    const color = (it.color || '').trim().toLowerCase()
+    const size = (it.size || '').trim().toLowerCase()
+    const oneSize = !size || size === 'one size'
+    const colorOf = v => (v.options?.color || '').trim().toLowerCase()
+    const sizeOf = v => (v.options?.size || '').trim().toLowerCase()
+    let v = variants.find(x => colorOf(x) === color && (oneSize ? !sizeOf(x) : sizeOf(x) === size))
+    if (!v) {
+      const sameColor = variants.filter(x => colorOf(x) === color)
+      if (sameColor.length === 1) v = sameColor[0]
+    }
+    if (!v && variants.length === 1) v = variants[0]
+    if (!v || !v.sku) {
+      const have = variants.map(x => `${x.options?.color || '?'} / ${x.options?.size || '-'}`).join(', ')
+      throw new Error(`No SKU match for "${p.name}" ${it.color} / ${it.size} — FE variants: ${have}`)
+    }
+    return { ...it, sku: v.sku }
+  })
+}
+
+// items: [{ productId, color, size, qty, price }] — FE campaign products only.
+// validateOnly hits the dry-run endpoint: full validation, nothing produced.
 export async function createFEOrder({ externalId, items, address, email, validateOnly = false }) {
-  const orderItemGroups = items.map((it, i) => ({
+  const resolved = await resolveSkus(items)
+  const orderItemGroups = resolved.map((it, i) => ({
     id: `item-${i + 1}`,
-    campaignProductId: it.productId,
-    productColor: it.color || undefined,
-    // One-size products have no Size option in FE — omit rather than mismatch.
-    productSize: it.size && it.size !== 'One Size' ? it.size : undefined,
+    sku: it.sku,
     quantity: it.qty,
     declaredValue: it.price,
   }))
