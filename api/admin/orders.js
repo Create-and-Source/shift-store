@@ -19,6 +19,36 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
+  // Friday-settlement paid tracking (both roles). Fail-soft while the
+  // settlements table hasn't been migrated yet — the panel still renders,
+  // marking just reports the missing table.
+  if (req.method === 'GET' && req.query.view === 'settlements') {
+    const { data, error } = await supabase.from('settlements').select('*')
+    if (error) return res.status(200).json({ settlements: [], missing: true })
+    return res.status(200).json({ settlements: data || [] })
+  }
+
+  if (req.method === 'POST' && req.body?.action === 'markSettled') {
+    const { weekStart, amount, paid } = req.body
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart || '')) {
+      return res.status(400).json({ error: 'weekStart must be YYYY-MM-DD' })
+    }
+    const q = paid === false
+      ? supabase.from('settlements').delete().eq('week_start', weekStart)
+      : supabase.from('settlements').upsert({
+          week_start: weekStart,
+          amount: Number(amount) || null,
+          paid_by: role,
+          paid_at: new Date().toISOString(),
+        })
+    const { error } = await q
+    if (error) {
+      const missing = /settlements/.test(error.message) && /not exist|not find/i.test(error.message)
+      return res.status(500).json({ error: missing ? 'Payment tracking table missing — run supabase-settlements.sql' : error.message })
+    }
+    return res.status(200).json({ ok: true })
+  }
+
   if (req.method === 'GET') {
     const { status } = req.query
 

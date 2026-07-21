@@ -2570,6 +2570,8 @@ function AdminOrdersPage({ adminPassword, role }) {
   const [ownerPrices, setOwnerPrices] = useState({});  // owner layer (owner login only)
   const [csvFrom, setCsvFrom] = useState('');          // profit report date range
   const [csvTo, setCsvTo] = useState('');
+  const [settled, setSettled] = useState({});          // 'YYYY-MM-DD' week start -> paid row
+  const [settleMsg, setSettleMsg] = useState('');
 
   // Cost basis for profit math — the feeds answer per-role (owner: true cost,
   // staff: the owner's price), so the same view shows each her own profit.
@@ -2685,6 +2687,41 @@ function AdminOrdersPage({ adminPassword, role }) {
     }
     return [...weeks.values()].sort((a, b) => b.start - a.start);
   })();
+
+  // Paid tracking for the settlement weeks — rows live in the settlements
+  // table, keyed by the week's Friday as a local YYYY-MM-DD date.
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  useEffect(() => {
+    fetch('/api/admin/orders?view=settlements', { headers: { 'x-admin-key': adminPassword } })
+      .then(r => r.json())
+      .then(d => {
+        const m = {};
+        for (const s of d.settlements || []) m[s.week_start] = s;
+        setSettled(m);
+      })
+      .catch(() => {});
+  }, []);
+
+  const markSettled = async (w, paid) => {
+    if (!paid && !confirm('Unmark this week as paid?')) return;
+    const weekStart = ymd(w.start);
+    const amount = +(w.items + w.shipping).toFixed(2);
+    setSettleMsg('');
+    const res = await fetch('/api/admin/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+      body: JSON.stringify({ action: 'markSettled', weekStart, amount, paid }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { setSettleMsg(data.error || 'Could not save'); return; }
+    setSettled(prev => {
+      const next = { ...prev };
+      if (paid) next[weekStart] = { week_start: weekStart, amount, paid_at: new Date().toISOString() };
+      else delete next[weekStart];
+      return next;
+    });
+  };
 
   // Tax/profit report: one CSV row per item in the date range, using this
   // login's own numbers (the same per-role math as the strip). Snapshot rows
@@ -2907,9 +2944,25 @@ function AdminOrdersPage({ adminPassword, role }) {
                   {w.estimated > 0 ? ` · ${w.estimated} item(s) at current catalog cost (pre-snapshot order)` : ''}
                   {w.unknown > 0 ? ` · ${w.unknown} item(s) missing a cost — not included` : ''}
                 </span>
+                {(() => {
+                  const s = settled[ymd(w.start)];
+                  if (!s) return <button className="filter-btn" style={{ marginLeft: 'auto' }} onClick={() => markSettled(w, true)}>Mark paid</button>;
+                  const drift = s.amount != null && Math.abs(Number(s.amount) - (w.items + w.shipping)) > 0.01;
+                  return (
+                    <span className="admin-settle-paidwrap">
+                      <span className="admin-settle-paid">
+                        Paid ✓ {new Date(s.paid_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {s.amount != null ? ` · $${Number(s.amount).toFixed(2)}` : ''}
+                      </span>
+                      {drift && <span className="admin-settle-drift">now computes ${(w.items + w.shipping).toFixed(2)}</span>}
+                      <button className="admin-settle-undo" onClick={() => markSettled(w, false)} title="Unmark as paid">×</button>
+                    </span>
+                  );
+                })()}
               </div>
             );
           })}
+          {settleMsg && <span className="admin-settle-hint" style={{ color: '#e53e3e' }}>{settleMsg}</span>}
         </div>
       )}
 

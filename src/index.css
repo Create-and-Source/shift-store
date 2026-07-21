@@ -2739,6 +2739,29 @@ img { max-width: 100%; display: block; }
   color: #111;
 }
 .admin-settle-detail { font-size: 11px; color: #aaa; }
+.admin-settle-paidwrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.admin-settle-paid {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1f9d55;
+  white-space: nowrap;
+}
+.admin-settle-drift { font-size: 11px; color: #dd6b20; }
+.admin-settle-undo {
+  border: none;
+  background: none;
+  color: #bbb;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.admin-settle-undo:hover { color: #e53e3e; }
 .admin-export-bar {
   display: flex;
   align-items: center;
