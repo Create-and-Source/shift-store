@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
-import { BrowserRouter, Routes, Route, Link, useLocation, useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader, Package, Truck, Eye, LogOut, Lock, Mail, Clock, Search, Download } from 'lucide-react';
 import { supabase } from './lib/supabase';
@@ -392,10 +392,10 @@ function Footer() {
         </div>
         <div className="footer-col">
           <h4>Info</h4>
-          <a href="#">Shipping</a>
-          <a href="#">Returns</a>
-          <a href="#">Privacy</a>
-          <a href="#">Terms</a>
+          <Link to="/info/shipping">Shipping</Link>
+          <Link to="/info/returns">Returns</Link>
+          <Link to="/info/privacy">Privacy</Link>
+          <Link to="/info/terms">Terms</Link>
         </div>
       </div>
       <div className="footer-bottom">
@@ -1106,14 +1106,65 @@ function AboutPage() {
         </p>
       </div>
 
-      <section className="spread">
-        <div className="spread-img glitch-img-wrap">
-          <img src="/lifestyle/convertible-pink-red.png" alt="Shift lifestyle" loading="lazy" />
-        </div>
-        <div className="spread-text" style={{ alignItems: 'center', textAlign: 'center' }}>
+      <section className="spread spread-centered">
+        <div className="spread-text" style={{ alignItems: 'center', textAlign: 'center', margin: '0 auto' }}>
           <img src="/shift-logo.png" alt="Shift" style={{ width: 200, filter: 'brightness(0) invert(1)', marginBottom: 24 }} />
           <p style={{ fontSize: 15, color: 'var(--gray)', lineHeight: 1.8 }}>Your Mindset. Your Focus. Your Perspective.</p>
         </div>
+      </section>
+    </>
+  );
+}
+
+const POLICY_PAGES = {
+  shipping: {
+    title: 'Shipping',
+    body: [
+      'Every Shift piece is made to order. Production takes 2–7 business days, and delivery adds another 3–10 business days depending on the item and where you are.',
+      'Shipping is calculated at checkout. Once your order ships, tracking appears automatically in your account under My Orders — no need to email us; the tracking link updates in real time from our production partners.',
+      'We currently ship within the United States.',
+    ],
+  },
+  returns: {
+    title: 'Returns',
+    body: [
+      'Everything we make is printed just for you, so we don\'t accept returns for sizing or change of mind — check the size guide on each product before ordering.',
+      'If your order arrives damaged, misprinted, or wrong, we\'ll make it right with a free replacement or a refund. Email shift@createandsource.com within 30 days of delivery with your order number and a photo of the issue.',
+    ],
+  },
+  privacy: {
+    title: 'Privacy',
+    body: [
+      'We collect only what it takes to run your order: your email, shipping address, and what you bought. Payment details go directly to Stripe — we never see or store your card number.',
+      'Your name and address are shared with our production partners solely so they can print and ship your order. We don\'t sell your information or share it with anyone else.',
+      'Newsletter signups are used only for Shift updates, and every email includes a way out. Questions or deletion requests: shift@createandsource.com.',
+    ],
+  },
+  terms: {
+    title: 'Terms',
+    body: [
+      'By ordering from Shift you agree to these basics: all items are made to order and produced on demand; prices and availability can change; and once an order enters production it can\'t be modified or cancelled.',
+      'We do our best to represent colors and fit accurately, but small variations between screens and garments are normal for printed apparel.',
+      'Our liability is limited to the amount you paid for your order. For anything these terms don\'t cover, email shift@createandsource.com and a human will sort it out.',
+    ],
+  },
+};
+
+function PolicyPage() {
+  const { slug } = useParams();
+  const page = POLICY_PAGES[slug];
+  if (!page) return <Navigate to="/" replace />;
+  return (
+    <>
+      <div className="scanlines" />
+      <div className="shop-header" style={{ paddingBottom: 0 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--red)', marginBottom: 16 }}>Info</div>
+        <h1 className="shop-title">{page.title}</h1>
+      </div>
+      <section className="intro" style={{ paddingTop: 60 }}>
+        {page.body.map((p, i) => (
+          <p key={i} className="intro-body" style={i ? { marginTop: 24 } : undefined}>{p}</p>
+        ))}
       </section>
     </>
   );
@@ -3350,6 +3401,7 @@ export default function App() {
               <Route path="/product/:id" element={<ProductPage />} />
               <Route path="/collections" element={<CollectionsPage />} />
               <Route path="/about" element={<AboutPage />} />
+              <Route path="/info/:slug" element={<PolicyPage />} />
               <Route path="/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
               <Route path="/order-success" element={<OrderSuccessPage />} />
               <Route path="/account" element={<AccountPage />} />

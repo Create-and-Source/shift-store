@@ -20,6 +20,8 @@ One login screen at **/dashadmin**, two worlds:
 
 **Sources feed TRUE cost** (aligned 2026-07-15): Fulfill Engine + Printify prices set by Tovah; the 7 Shopify/Tapstitch listings were halved to real production cost (Tapstitch had auto-listed at exactly 2×).
 
+**Shopify orders use the DRAFT-ORDER flow (2026-07-20, proven live)**: `draftOrderCreate` + `draftOrderComplete` — NOT `orderCreate`. Tapstitch only imports orders from Shopify's native channels; direct-API orders (custom-app channel) are invisible to it forever, regardless of shipping/fulfillment-request state. The draft path is the same door as admin "Create order", so Tapstitch imports within a minute. App scopes are now `write_orders,write_draft_orders` (granted via the legacy-install authorize URL + code exchange; token unchanged). Tapstitch store settings: U.S. fulfillment + **auto-submission hourly** (orders pay+submit themselves at the top of each hour; manual Pay in Tapstitch for instant). Admin order detail has **"Send to Shopify"** (draft-flow resubmit, 409+confirm force path for orders whose old Shopify order was cancelled).
+
 ## Admin feature inventory (all live, both roles unless noted)
 
 - **Products**: editable name (→ store), Description button/editor (→ store), per-product price (role's own layer), live profit readout, Hide, category assignment, search.
