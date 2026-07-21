@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!shopifyAdminEnabled()) return res.status(400).json({ error: 'Shopify admin token not configured' })
 
-  const { orderId } = req.body || {}
+  const { orderId, force = false } = req.body || {}
   if (!orderId) return res.status(400).json({ error: 'orderId required' })
 
   const { data: order, error: findErr } = await supabase
@@ -24,8 +24,11 @@ export default async function handler(req, res) {
     .eq('id', orderId)
     .single()
   if (findErr || !order) return res.status(404).json({ error: 'Order not found' })
-  if (order.shopify_order_id) {
-    return res.status(400).json({ error: `Already sent to Shopify (${order.shopify_order_id}) — a re-send would duplicate production` })
+  // force=true re-sends even with an existing backlink — for replacing a
+  // Shopify order that was cancelled there (e.g. pre-draft-flow orders
+  // Tapstitch never imported). Cancel the old one in Shopify first.
+  if (order.shopify_order_id && !force) {
+    return res.status(409).json({ error: `Already sent to Shopify (${order.shopify_order_id})`, canForce: true })
   }
 
   const addr = order.shipping_address || {}
