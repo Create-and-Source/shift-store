@@ -2705,6 +2705,40 @@ img { max-width: 100%; display: block; }
   color: #111;
 }
 .admin-profit-strip strong.earn { color: #1f9d55; }
+.admin-settle {
+  display: grid;
+  gap: 10px;
+  padding: 12px 24px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+}
+.admin-settle-head { display: grid; gap: 2px; }
+.admin-settle-hint { font-size: 11px; color: #aaa; }
+.admin-settle-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.admin-settle-due {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+.admin-settle-due small {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #999;
+}
+.admin-settle-due strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: #111;
+}
+.admin-settle-detail { font-size: 11px; color: #aaa; }
 .admin-export-bar {
   display: flex;
   align-items: center;

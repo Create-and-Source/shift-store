@@ -2641,6 +2641,51 @@ function AdminOrdersPage({ adminPassword, role }) {
     return { revenue, earn, counted, estimated, total: orders.filter(o => o.status !== 'cancelled').length };
   })();
 
+  // Friday settlement — what the store pays Create & Source out of each
+  // Friday Stripe payout: every item at the store's cost (C&S fronts the
+  // production bill) plus the shipping the customer paid (C&S pays the real
+  // shipping). Weeks run Friday→Thursday; payment is due the next Friday.
+  // Staff's item.cost IS her cost; the owner reads her private layer directly —
+  // both roles land on the same dollar amount.
+  const itemPayable = (it) => {
+    const qty = it.quantity || 1;
+    if (it.cost != null) {
+      const c = role === 'owner' ? Number(it.owner_price ?? it.cost) : Number(it.cost);
+      return { amount: c * qty, exact: true };
+    }
+    const base = costMap ? costMap[it.product_id] : null;
+    if (base == null) return null;
+    const c = role === 'owner' ? Number(ownerPrices[it.product_id] ?? base) : Number(base);
+    return { amount: c * qty, exact: false };
+  };
+
+  const settlementWeeks = (() => {
+    // Needs every order — hidden while a status filter narrows the list.
+    if (filter !== 'all' || !costMap || !orders.length) return null;
+    const weekStart = (iso) => {
+      const d = new Date(iso);
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - ((d.getDay() - 5 + 7) % 7)); // back to Friday
+      return d;
+    };
+    const weeks = new Map();
+    for (const o of orders) {
+      if (o.status === 'cancelled') continue;
+      const ws = weekStart(o.created_at);
+      let w = weeks.get(ws.getTime());
+      if (!w) weeks.set(ws.getTime(), w = { start: ws, items: 0, shipping: 0, orders: 0, estimated: 0, unknown: 0 });
+      w.orders++;
+      w.shipping += Number(o.shipping_cost ?? (o.total - o.subtotal)) || 0;
+      for (const it of o.items || []) {
+        const p = itemPayable(it);
+        if (p == null) { w.unknown++; continue; }
+        w.items += p.amount;
+        if (!p.exact) w.estimated++;
+      }
+    }
+    return [...weeks.values()].sort((a, b) => b.start - a.start);
+  })();
+
   // Tax/profit report: one CSV row per item in the date range, using this
   // login's own numbers (the same per-role math as the strip). Snapshot rows
   // are exact; pre-snapshot rows are flagged as estimates.
@@ -2832,6 +2877,39 @@ function AdminOrdersPage({ adminPassword, role }) {
             {profitTotals.estimated > 0 ? ` · ${profitTotals.estimated} order(s) estimated at current costs` : ' · exact purchase-time costs'}
             {profitTotals.counted < profitTotals.total ? ` · ${profitTotals.total - profitTotals.counted} order(s) not counted (product no longer in the catalog)` : ''}
           </span>
+        </div>
+      )}
+
+      {settlementWeeks && settlementWeeks.length > 0 && (
+        <div className="admin-settle">
+          <div className="admin-settle-head">
+            <span className="admin-export-label">{role === 'owner' ? 'Create & Source settlement — what the store pays you' : 'Pay Create & Source'}</span>
+            <span className="admin-settle-hint">
+              {role === 'owner'
+                ? 'Her cost on every item + shipping collected, grouped by payout week (Fri–Thu).'
+                : 'Your cost on every item + the shipping your customers paid — Create & Source fronts the production and shipping bills. Pay each amount on its Friday, when that week’s Stripe payout lands.'}
+            </span>
+          </div>
+          {settlementWeeks.map(w => {
+            const due = new Date(w.start); due.setDate(due.getDate() + 7);
+            const end = new Date(w.start); end.setDate(end.getDate() + 6);
+            const open = new Date() < due;
+            const fmt = d => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            return (
+              <div key={w.start.getTime()} className="admin-settle-row">
+                <div className="admin-settle-due">
+                  <small>Due {fmt(due)}</small>
+                  <strong style={open ? { color: '#dd6b20' } : undefined}>${(w.items + w.shipping).toFixed(2)}</strong>
+                </div>
+                <span className="admin-settle-detail">
+                  {fmt(w.start)} – {fmt(end)} · {w.orders} order{w.orders === 1 ? '' : 's'} · ${w.items.toFixed(2)} product + ${w.shipping.toFixed(2)} shipping
+                  {open ? ' · week still open — final Thursday night' : ''}
+                  {w.estimated > 0 ? ` · ${w.estimated} item(s) at current catalog cost (pre-snapshot order)` : ''}
+                  {w.unknown > 0 ? ` · ${w.unknown} item(s) missing a cost — not included` : ''}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
