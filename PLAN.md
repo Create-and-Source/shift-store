@@ -61,14 +61,14 @@ Built after an organic order hit an out-of-stock FE blank: **FE's public shop fe
 
 Tovah's pick over holding the money herself: **the LLC stays merchant of record; every charge carries `application_fee_amount` = the C&S share (items at owner price ?? true cost + shipping — the settlement-panel formula), routed to Tovah's platform account before the partner is paid anything.** Partner nets retail − C&S share − Stripe processing fee (fee burden unchanged from today). Sessions are created ON the LLC account (`stripeAccount` header) THROUGH the platform key — so the existing webhook, secret, and dashboard are untouched. **Refund pass-through (her call: "I should refund too")**: webhook handles `charge.refunded` and refunds the application fee in the same proportion via the platform key — idempotent (computes target from amounts, issues only the delta); works for partner dashboard refunds too.
 
-**Inert until configured — falls back to the direct legacy path on missing env or ANY Connect error (checkout never breaks over the split).** Setup:
-1. Tovah's platform = her own Stripe account (NOT the LLC): Dashboard → Connect → set up platform profile (Standard accounts, direct charges, platform collects fees).
-2. LLC authorizes the platform: Connect OAuth link (`connect.stripe.com/oauth/authorize?response_type=code&client_id=<ca_… from platform Connect settings>&scope=read_write`) opened while logged into the Shift Apparel LLC account → approve → the platform's Connect accounts list shows `acct_1TvRRgFUHp82gpm3`.
-3. Vercel env: `STRIPE_PLATFORM_KEY` (platform LIVE secret key, Sensitive). `STRIPE_CONNECT_ACCOUNT` optional — defaults to the LLC acct id in code.
-4. Add **`charge.refunded`** to the "shift-store orders" webhook destination's events (Workbench, LLC account).
-5. Test: small Order-at-Cost purchase → Stripe payment shows the application fee; platform balance gains the C&S share.
+**SETUP COMPLETED 2026-07-21 (same session)** — falls back to the direct legacy path on missing env or ANY Connect error (checkout never breaks over the split):
+1. ✅ Platform = **Create and Source** account `acct_1S6acUIS77PGmiND` (Connect was already enabled on it). OAuth toggled ON + redirect URI `https://shiftapparelco.com/api/connect-exchange` added (Settings → Connect → Onboarding options → OAuth; live client_id `ca_UBc5BXA6nm50GjTvXRMekVFBhnG1rG8R`).
+2. ✅ LLC authorized via the OAuth link; the exchange completes SERVER-SIDE at **`api/connect-exchange.js`** (the redirect URI itself — uses the env platform key, shows "Connected ✓"; safe to keep deployed, codes are single-use). Confirmed: `acct_1TvRRgFUHp82gpm3` connected.
+3. ✅ `STRIPE_PLATFORM_KEY` in Vercel (fresh key "shift-connect-platform" on the C&S account — in Stripe's create-key dialog pick **"Powering an integration you built"**; the "AI agent" option only mints restricted keys, which can't do the OAuth exchange) + redeployed.
+4. ✅ `charge.refunded` added to the "shift-store orders" Workbench destination (now 2 events; signing secret unchanged — no re-registration needed).
+5. ⏳ Prove on the next real charge: the payment in the LLC dashboard shows the application fee, C&S balance gains the share. (A cheap Order-at-Cost purchase works as the test.)
 
-Once live, the Friday settlement panel = verification/history, not a to-do (money already split per-charge). Note: platform payouts follow Tovah's payout schedule.
+Once proven, the Friday settlement panel = verification/history, not a to-do (money already split per-charge). Note: platform payouts follow Tovah's payout schedule. Stripe-dashboard automation gotchas: the account-switcher menu click SIGNS YOU OUT (lost the session once — navigate by direct `/acct_…/` URLs instead); the Workbench event picker's search only filters the ACTIVE tab (switch to "All events" first).
 
 ## Customer portal (/account) — reworked 2026-07-20 (email-free auth)
 
