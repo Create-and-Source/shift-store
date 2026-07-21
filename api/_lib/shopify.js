@@ -263,7 +263,13 @@ mutation orderCreate($order: OrderCreateOrderInput!) {
 export async function createShopifyOrder({ email, lineItems, shippingAddress }) {
   const order = {
     financialStatus: 'PAID',
-    lineItems: lineItems.map(li => ({ variantId: li.variantId, quantity: li.quantity })),
+    // requiresShipping must be explicit — API-created orders default to
+    // "Shipping not required", which makes Tapstitch/POD apps skip them.
+    lineItems: lineItems.map(li => ({ variantId: li.variantId, quantity: li.quantity, requiresShipping: true })),
+    shippingLines: [{
+      title: 'Standard Shipping',
+      priceSet: { shopMoney: { amount: '0.00', currencyCode: 'USD' } },
+    }],
   }
   if (email) order.email = email
   if (shippingAddress) order.shippingAddress = toShopifyAddress(shippingAddress)
