@@ -2974,7 +2974,25 @@ function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh, 
           </button>
         )}
         {order.printify_order_id && <div style={{ fontSize: 13, marginTop: 6 }}>Printify order: {order.printify_order_id}</div>}
-        {order.shopify_order_id && <div style={{ fontSize: 13, marginTop: 6 }}>Shopify order: {order.shopify_order_id}</div>}
+        {order.shopify_order_id ? (
+          <div style={{ fontSize: 13, marginTop: 6 }}>Shopify order: {order.shopify_order_id}</div>
+        ) : (
+          <button className="admin-action-btn" style={{ marginTop: 8 }} disabled={busy} onClick={async () => {
+            setBusy(true); setFulfillMsg('Creating Shopify order (draft flow)…');
+            try {
+              const res = await fetch('/api/admin/shopify-submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+                body: JSON.stringify({ orderId: order.id }),
+              });
+              const d = await res.json();
+              if (!res.ok) throw new Error(d.error + (d.detail ? ' — ' + JSON.stringify(d.detail).slice(0, 300) : ''));
+              setFulfillMsg(`Sent to Shopify ✓ ${d.order?.name || ''} (${d.items} item${d.items === 1 ? '' : 's'}) — Tapstitch imports it within a minute.`);
+              onRefresh?.();
+            } catch (err) { setFulfillMsg(err.message); }
+            setBusy(false);
+          }}>Send to Shopify</button>
+        )}
         <button className="admin-action-btn" style={{ marginTop: 8, fontSize: 11 }} disabled={busy} onClick={async () => {
           setBusy(true); setFulfillMsg('Fetching FE debug data…');
           try {
