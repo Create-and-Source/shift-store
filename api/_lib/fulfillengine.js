@@ -68,10 +68,13 @@ export async function feDebug(items) {
   return { campaignId: FE_CAMPAIGN_ID, products: slim, inventory, prices }
 }
 
-// FE requires a real SKU per order item ("All order item groups must include
-// one of: SKU, GTIN, CatalogProductId, or VendorSKU") — resolve each item's
-// variant SKU from the authenticated campaign catalog by color + size.
-async function resolveSkus(items) {
+// The store's items are print-on-demand: campaign variant SKUs are NOT
+// orderable (FE's campaign inventory reports them empty → InvalidSKU on
+// orders). A POD order references the catalog BLANK (catalogProductId, an
+// accepted identifier) + the stored design (designId = "design details") +
+// productColor/productSize to pick the variant. Both come from the
+// authenticated campaign catalog.
+async function resolvePodItems(items) {
   const ids = [...new Set(items.map(it => it.productId))]
   const products = await feFetch(`/campaigns/${FE_CAMPAIGN_ID}/products`, {
     method: 'POST',
@@ -81,33 +84,21 @@ async function resolveSkus(items) {
   return items.map(it => {
     const p = byId.get(it.productId)
     if (!p) throw new Error(`Product ${it.productId} not found in the FE campaign`)
-    const variants = p.variants || []
-    const color = (it.color || '').trim().toLowerCase()
-    const size = (it.size || '').trim().toLowerCase()
-    const oneSize = !size || size === 'one size'
-    const colorOf = v => (v.options?.color || '').trim().toLowerCase()
-    const sizeOf = v => (v.options?.size || '').trim().toLowerCase()
-    let v = variants.find(x => colorOf(x) === color && (oneSize ? !sizeOf(x) : sizeOf(x) === size))
-    if (!v) {
-      const sameColor = variants.filter(x => colorOf(x) === color)
-      if (sameColor.length === 1) v = sameColor[0]
-    }
-    if (!v && variants.length === 1) v = variants[0]
-    if (!v || !v.sku) {
-      const have = variants.map(x => `${x.options?.color || '?'} / ${x.options?.size || '-'}`).join(', ')
-      throw new Error(`No SKU match for "${p.name}" ${it.color} / ${it.size} — FE variants: ${have}`)
-    }
-    return { ...it, sku: v.sku }
+    if (!p.catalogProductId) throw new Error(`"${p.name}" has no catalogProductId in FE`)
+    return { ...it, catalogProductId: p.catalogProductId, designId: p.designId || undefined }
   })
 }
 
 // items: [{ productId, color, size, qty, price }] — FE campaign products only.
 // validateOnly hits the dry-run endpoint: full validation, nothing produced.
 export async function createFEOrder({ externalId, items, address, email, validateOnly = false }) {
-  const resolved = await resolveSkus(items)
+  const resolved = await resolvePodItems(items)
   const orderItemGroups = resolved.map((it, i) => ({
     id: `item-${i + 1}`,
-    sku: it.sku,
+    catalogProductId: it.catalogProductId,
+    designId: it.designId,
+    productColor: it.color || undefined,
+    productSize: it.size && it.size !== 'One Size' ? it.size : undefined,
     quantity: it.qty,
     declaredValue: it.price,
   }))
