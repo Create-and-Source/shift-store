@@ -9,7 +9,7 @@
 // Both are deduped via timestamp columns on orders (supabase-email-log.sql).
 import { createClient } from '@supabase/supabase-js'
 
-const FROM = 'SHIFT <shift@shiftapparelco.com>'
+const FROM = 'SHIFT <noreply@shiftapparelco.com>'
 const STORE_URL = 'https://shiftapparelco.com'
 
 const supabase = createClient(
@@ -53,8 +53,7 @@ function shell(inner) {
 ${inner}
 </td></tr>
 <tr><td style="padding:18px 32px;border-top:1px solid #eeeeee;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#999999;">
-  Life Keeps Moving — <a href="${STORE_URL}" style="color:#999999;">shiftapparelco.com</a><br/>
-  Questions? Reply to this email — shift@shiftapparelco.com.
+  Life Keeps Moving — <a href="${STORE_URL}" style="color:#999999;">shiftapparelco.com</a>
 </td></tr>
 </table>
 </td></tr></table></body></html>`
