@@ -2975,7 +2975,19 @@ function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh, 
         )}
         {order.printify_order_id && <div style={{ fontSize: 13, marginTop: 6 }}>Printify order: {order.printify_order_id}</div>}
         {order.shopify_order_id && <div style={{ fontSize: 13, marginTop: 6 }}>Shopify order: {order.shopify_order_id}</div>}
-        {fulfillMsg && <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 8 }}>{fulfillMsg}</div>}
+        <button className="admin-action-btn" style={{ marginTop: 8, fontSize: 11 }} disabled={busy} onClick={async () => {
+          setBusy(true); setFulfillMsg('Fetching FE debug data…');
+          try {
+            const res = await fetch('/api/admin/fe-submit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+              body: JSON.stringify({ orderId: order.id, debug: true }),
+            });
+            setFulfillMsg(JSON.stringify(await res.json(), null, 1));
+          } catch (err) { setFulfillMsg(err.message); }
+          setBusy(false);
+        }}>FE debug</button>
+        {fulfillMsg && <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{fulfillMsg}</div>}
       </div>
 
       <div className="admin-detail-section">

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { roleFromReq } from '../_lib/adminRole.js'
-import { feEnabled, createFEOrder } from '../_lib/fulfillengine.js'
+import { feEnabled, createFEOrder, feDebug } from '../_lib/fulfillengine.js'
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
@@ -40,6 +40,15 @@ export default async function handler(req, res) {
   const feIds = new Set((feed.products || []).map(p => p.id))
   const feItems = (order.items || []).filter(it => feIds.has(it.product_id))
   if (!feItems.length) return res.status(400).json({ error: 'No Fulfill Engine items on this order' })
+
+  if (req.body?.debug) {
+    try {
+      const dbg = await feDebug(feItems.map(it => ({ productId: it.product_id })))
+      return res.status(200).json(dbg)
+    } catch (err) {
+      return res.status(502).json({ error: err.message, detail: err.body })
+    }
+  }
 
   try {
     const result = await createFEOrder({

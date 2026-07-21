@@ -37,6 +37,37 @@ export async function testFEAuth() {
 }
 
 // items: [{ productId, color, size, qty, price }] — FE campaign products only.
+// Diagnostic bundle: the campaign's products/variants/SKUs as FE sees them,
+// FE's own per-SKU validity check (campaign inventory), and account prices.
+export async function feDebug(items) {
+  const ids = [...new Set(items.map(it => it.productId))]
+  const products = await feFetch(`/campaigns/${FE_CAMPAIGN_ID}/products`, {
+    method: 'POST',
+    body: JSON.stringify({ campaignProductIds: ids }),
+  })
+  const slim = (Array.isArray(products) ? products : []).map(p => ({
+    id: p.id,
+    name: p.name,
+    catalogProductId: p.catalogProductId,
+    designId: p.designId,
+    variants: (p.variants || []).map(v => ({ sku: v.sku, options: v.options })),
+  }))
+  const skus = slim.flatMap(p => p.variants.map(v => v.sku)).filter(Boolean)
+  let inventory = null
+  let prices = null
+  try {
+    inventory = await feFetch(`/campaigns/${FE_CAMPAIGN_ID}/inventory`, {
+      method: 'POST', body: JSON.stringify({ skus }),
+    })
+  } catch (e) { inventory = { error: e.message, detail: e.body } }
+  try {
+    prices = await feFetch(`/campaigns/${FE_CAMPAIGN_ID}/products/account-prices`, {
+      method: 'POST', body: JSON.stringify({ productIds: ids }),
+    })
+  } catch (e) { prices = { error: e.message, detail: e.body } }
+  return { campaignId: FE_CAMPAIGN_ID, products: slim, inventory, prices }
+}
+
 // FE requires a real SKU per order item ("All order item groups must include
 // one of: SKU, GTIN, CatalogProductId, or VendorSKU") — resolve each item's
 // variant SKU from the authenticated campaign catalog by color + size.
