@@ -419,6 +419,9 @@ function Footer() {
       </div>
       <div className="footer-bottom">
         <span>&copy; {new Date().getFullYear()} Shift. All rights reserved.</span>
+        <span className="footer-credit">
+          Designed &amp; backed by <a href="https://www.createandsource.com" target="_blank" rel="noopener">Create &amp; Source</a>
+        </span>
         <span style={{ color: 'var(--red)' }}>Life Keeps Moving &rarr;</span>
       </div>
     </footer>
