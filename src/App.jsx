@@ -881,11 +881,19 @@ const sizeRank = (name) => { const i = SIZE_ORDER.indexOf(String(name).trim().to
 // FE blank-level availability, from /api/stock. Only combos FE explicitly
 // reports out of stock are blocked — unknown products/combos stay sellable
 // (fail open), and the checkout API re-checks server-side regardless.
-// Key shape mirrors comboKey() in api/_lib/fulfillengine.js.
+// Key shape MUST mirror comboKey() in api/_lib/fulfillengine.js: sizes
+// canonicalize to abbreviations because FE's catalog says '3XL' where the
+// shop feed says 'XXX-Large' (verified live 2026-07-21).
+const SIZE_CANON = {
+  'xx-small': 'xxs', 'x-small': 'xs', 'small': 's', 'medium': 'm', 'large': 'l',
+  'x-large': 'xl', 'xx-large': '2xl', 'xxl': '2xl', 'xxx-large': '3xl', 'xxxl': '3xl',
+  'xxxx-large': '4xl', 'xxxxl': '4xl', 'xxxxx-large': '5xl', 'xxxxxl': '5xl',
+  'one size': '',
+};
 const stockKey = (color, size) => {
   const norm = v => String(v || '').trim().toLowerCase();
   const s = norm(size);
-  return `${norm(color)}|${s === 'one size' ? '' : s}`;
+  return `${norm(color)}|${SIZE_CANON[s] ?? s}`;
 };
 const comboSoldOut = (stock, productId, color, size) =>
   (stock?.[productId]?.unavailableKeys || []).includes(stockKey(color, size));

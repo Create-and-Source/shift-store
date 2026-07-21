@@ -68,14 +68,22 @@ export async function feDebug(items) {
   return { campaignId: FE_CAMPAIGN_ID, products: slim, inventory, prices }
 }
 
-// Stable lookup key for a (color, size) combo. FE's catalog SKU options use
-// the same display names as the shop feed ('Faded Black', 'X-Large');
-// matching is case/space-insensitive. One-size products (hats, bags) carry
+// Stable lookup key for a (color, size) combo. Colors share display names
+// across FE's catalog and the shop feed ('Black Stone'), but sizes do NOT:
+// the shop feed spells them out ('XXX-Large') while catalog inventory
+// abbreviates ('3XL') — verified live 2026-07-21 — so both spellings
+// canonicalize to the abbreviation. One-size products (hats, bags) carry
 // 'One Size' in our carts but no size in FE — both normalize to ''.
+const SIZE_CANON = {
+  'xx-small': 'xxs', 'x-small': 'xs', 'small': 's', 'medium': 'm', 'large': 'l',
+  'x-large': 'xl', 'xx-large': '2xl', 'xxl': '2xl', 'xxx-large': '3xl', 'xxxl': '3xl',
+  'xxxx-large': '4xl', 'xxxxl': '4xl', 'xxxxx-large': '5xl', 'xxxxxl': '5xl',
+  'one size': '',
+}
 export function comboKey(color, size) {
   const norm = v => String(v || '').trim().toLowerCase()
   const s = norm(size)
-  return `${norm(color)}|${s === 'one size' ? '' : s}`
+  return `${norm(color)}|${SIZE_CANON[s] ?? s}`
 }
 
 // Blank-level availability for FE campaign products, per (color, size).
