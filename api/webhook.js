@@ -15,6 +15,12 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
 })
 
+// Platform client for the Connect split — used to refund the C&S application
+// fee when the partner refunds a customer. Null until STRIPE_PLATFORM_KEY set.
+const platformStripe = process.env.STRIPE_PLATFORM_KEY
+  ? new Stripe(process.env.STRIPE_PLATFORM_KEY, { httpClient: Stripe.createFetchHttpClient() })
+  : null
+
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -157,6 +163,34 @@ export default async function handler(req, res) {
   const ABANDONED_SESSIONS = new Set([
     'cs_live_b1sUmJaNERF4d9MEHcHFARmTLI2m2mtMNMLwd8jxbvYc6Caudn7KS1CzcW',
   ])
+
+  // ─── Refund pass-through (Connect split) ──────────────────────────────
+  // When the partner refunds a customer — fully or partially — the C&S
+  // application fee refunds in the SAME proportion (Tovah's call 07-21:
+  // "I should refund too"). Stripe does NOT do this automatically for
+  // dashboard refunds. Idempotent: the target is computed from amounts and
+  // only the delta is issued, so Stripe retries and repeat events are safe.
+  // Requires the charge.refunded event on the webhook destination.
+  if (event.type === 'charge.refunded') {
+    const charge = event.data.object
+    try {
+      if (platformStripe && charge.application_fee && charge.amount > 0) {
+        const feeId = typeof charge.application_fee === 'string'
+          ? charge.application_fee
+          : charge.application_fee.id
+        const fee = await platformStripe.applicationFees.retrieve(feeId)
+        const target = Math.round(fee.amount * charge.amount_refunded / charge.amount)
+        const delta = target - (fee.amount_refunded || 0)
+        if (delta > 0) {
+          await platformStripe.applicationFees.createRefund(feeId, { amount: delta })
+          console.log('Application fee refunded:', feeId, 'amount', delta, 'for charge', charge.id)
+        }
+      }
+    } catch (refErr) {
+      console.error('App-fee refund failed (non-fatal):', refErr.message)
+    }
+    return res.status(200).json({ received: true })
+  }
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object

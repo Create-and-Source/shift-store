@@ -1,10 +1,50 @@
 import Stripe from 'stripe'
 import { printifyEnabled, getPrintifyStandardShipping } from './_lib/printify.js'
 import { feEnabled, feAvailability, comboKey } from './_lib/fulfillengine.js'
+import { getOwnerPrices } from './_lib/adminRole.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
 })
+
+// ── Stripe Connect split (Option A, 2026-07-21) ──────────────────────────
+// The Shift Apparel LLC account stays merchant of record; the session is
+// created ON it THROUGH Tovah's platform account, carrying an
+// application_fee_amount = the C&S share (items at owner price + shipping —
+// the exact settlement-panel formula). Stripe routes that fee to the platform
+// before the partner is paid anything. Inert until STRIPE_PLATFORM_KEY is set
+// AND the LLC account has authorized the platform; any Connect failure falls
+// back to the direct legacy path — checkout must never break over the split.
+const CONNECT_ACCOUNT = process.env.STRIPE_CONNECT_ACCOUNT || 'acct_1TvRRgFUHp82gpm3'
+const PLATFORM_KEY = process.env.STRIPE_PLATFORM_KEY || ''
+const platformStripe = PLATFORM_KEY
+  ? new Stripe(PLATFORM_KEY, { httpClient: Stripe.createFetchHttpClient() })
+  : null
+
+// C&S share of this cart in cents: per item owner price ?? true source cost
+// (the owner-key feeds are unmasked), plus the shipping the customer pays —
+// mirrors the Friday settlement formula. Unknown items contribute 0 (they'll
+// surface as settlement drift rather than overcharging the partner).
+async function csShareCents(items, shippingCost, host) {
+  const h = { headers: { 'x-admin-key': process.env.ADMIN_KEY || '' } }
+  const base = `https://${host}`
+  const [a, b, c, ownerPrices] = await Promise.all([
+    fetch(`${base}/api/products`, h).then(r => r.json()).catch(() => ({})),
+    fetch(`${base}/api/printify/products`, h).then(r => r.json()).catch(() => ({})),
+    fetch(`${base}/api/shopify/products`, h).then(r => r.json()).catch(() => ({})),
+    getOwnerPrices(),
+  ])
+  const costs = {}
+  for (const p of [...(a.products || []), ...(b.products || []), ...(c.products || [])]) {
+    if (p?.id != null && p.price != null) costs[p.id] = Number(p.price)
+  }
+  let share = shippingCost
+  for (const it of items) {
+    const perUnit = ownerPrices?.[it.productId] ?? costs[it.productId] ?? 0
+    share += Number(perUnit) * (it.qty || 1)
+  }
+  return Math.max(0, Math.round(share * 100))
+}
 
 // Flat shipping for non-Printify (Fulfill Engine / static) items.
 const FLAT_SHIPPING = 10
@@ -131,7 +171,7 @@ export default async function handler(req, res) {
       chunks.forEach((c, idx) => { shopifyMeta[`sf${idx}`] = c })
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionParams = {
       mode: 'payment',
       payment_method_types: ['card'],
       line_items: lineItems,
@@ -154,7 +194,27 @@ export default async function handler(req, res) {
         ...printifyMeta,
         ...shopifyMeta,
       },
-    })
+    }
+
+    // Connect path: same merchant, C&S share skimmed as the platform fee.
+    if (platformStripe) {
+      try {
+        const totalCents = lineItems.reduce((s, li) => s + li.price_data.unit_amount * li.quantity, 0)
+        const fee = Math.min(
+          await csShareCents(items, shippingCost, req.headers.host),
+          totalCents
+        )
+        const session = await platformStripe.checkout.sessions.create(
+          { ...sessionParams, payment_intent_data: { application_fee_amount: fee } },
+          { stripeAccount: CONNECT_ACCOUNT }
+        )
+        return res.status(200).json({ url: session.url, sessionId: session.id })
+      } catch (connectErr) {
+        console.error('Connect checkout failed — falling back to direct:', connectErr.message)
+      }
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams)
 
     return res.status(200).json({ url: session.url, sessionId: session.id })
   } catch (err) {
