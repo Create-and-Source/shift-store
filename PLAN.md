@@ -50,6 +50,10 @@ Supabase auth, **Sign In / Sign Up only** (Magic Link removed). **Email confirma
 - No node on the dev Mac — verify on the live deploy.
 - Supabase auth emails use the built-in sender: **~2/hour**. Fine for testing, not for customers.
 
+## Stripe account (switched 2026-07-20)
+
+Payments run through the **Shift Apparel LLC** Stripe account (`acct_1TvRRgFUHp82gpm3`) — switched from the original shared account. Webhook destination "shift-store orders" (checkout.session.completed, API version 2026-06-24.dahlia) → /api/webhook. At switch time the account was **under Stripe review (2–3 days)** — a "can't accept payments" checkout error before review clears is Stripe, not the store. The two 07-20 test payments live in the OLD account (refund there if desired). Stripe Tax: activate on the Stripe side (never app-side); when registered, enable `automatic_tax` in create-checkout + move flat shipping to a real shipping rate. `SHOPIFY_WEBHOOK_SECRET` was rotated during the switch — "Enable real-time" must be clicked once after any rotation to re-register with the fresh token.
+
 ## Open items
 
 1. **Hand off staff access**: text the partner the STAFF_KEY password + shift-store.vercel.app/dashadmin.
