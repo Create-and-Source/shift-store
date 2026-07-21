@@ -91,6 +91,31 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, shipping_address: addr })
   }
 
+  // Permanent delete — owner only, and only for cancelled orders (cancel
+  // first, then delete; keeps a live order from being removed by mistake).
+  if (req.method === 'DELETE') {
+    if (role !== 'owner') return res.status(403).json({ error: 'Owner only' })
+    const orderId = req.query.orderId || req.body?.orderId
+    if (!orderId) return res.status(400).json({ error: 'orderId required' })
+
+    const { data: order, error: findErr } = await supabase
+      .from('orders')
+      .select('id, status')
+      .eq('id', orderId)
+      .single()
+    if (findErr || !order) return res.status(404).json({ error: 'Order not found' })
+    if (order.status !== 'cancelled') {
+      return res.status(400).json({ error: 'Only cancelled orders can be deleted — cancel it first' })
+    }
+
+    const { error: itemsErr } = await supabase.from('order_items').delete().eq('order_id', orderId)
+    if (itemsErr) return res.status(500).json({ error: itemsErr.message })
+    const { error: delErr } = await supabase.from('orders').delete().eq('id', orderId)
+    if (delErr) return res.status(500).json({ error: delErr.message })
+
+    return res.status(200).json({ ok: true, deleted: orderId })
+  }
+
   if (req.method === 'PATCH') {
     const { orderId, status, tracking_number, tracking_url, admin_notes } = req.body
 

@@ -2824,13 +2824,13 @@ function AdminOrdersPage({ adminPassword, role }) {
           )}
         </div>
 
-        {selected && <AdminOrderDetail order={selected} onUpdate={updateOrder} onClose={() => setSelected(null)} adminPassword={adminPassword} onRefresh={fetchOrders} />}
+        {selected && <AdminOrderDetail order={selected} onUpdate={updateOrder} onClose={() => setSelected(null)} adminPassword={adminPassword} onRefresh={fetchOrders} role={role} />}
       </div>
     </>
   );
 }
 
-function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh }) {
+function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh, role }) {
   const [tracking, setTracking] = useState(order.tracking_number || '');
   const [trackingUrl, setTrackingUrl] = useState(order.tracking_url || '');
   const [notes, setNotes] = useState(order.admin_notes || '');
@@ -2910,6 +2910,25 @@ function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh }
             <button className="admin-action-btn" style={{ color: '#e53e3e' }} onClick={() => {
               if (confirm('Cancel this order?')) onUpdate(order.id, { status: 'cancelled' });
             }}>Cancel</button>
+          )}
+          {order.status === 'cancelled' && role === 'owner' && (
+            <button className="admin-action-btn" style={{ color: '#e53e3e' }} disabled={busy} onClick={async () => {
+              if (!confirm('Delete this order permanently? It disappears from every report and cannot be undone.')) return;
+              setBusy(true);
+              try {
+                const res = await fetch(`/api/admin/orders?orderId=${order.id}`, {
+                  method: 'DELETE',
+                  headers: { 'x-admin-key': adminPassword },
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Delete failed');
+                onClose();
+                onRefresh?.();
+              } catch (err) {
+                setFulfillMsg(err.message);
+                setBusy(false);
+              }
+            }}>Delete permanently</button>
           )}
         </div>
       </div>
