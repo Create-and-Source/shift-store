@@ -263,7 +263,14 @@ export async function deletePrintifyWebhook(id) {
 // The store ships US-only, and Printify's US "standard" rate is provider-set
 // and uniform across the mainland, so a representative US address yields the
 // correct live rate without collecting the buyer's address up front.
+// Printify validates the full recipient shape even for rate estimates —
+// name/email/phone placeholders are required or the call 400s
+// ("Validation failed.").
 export const US_RATE_ADDRESS = {
+  first_name: 'Rate',
+  last_name: 'Estimate',
+  email: 'noreply@shiftapparelco.com',
+  phone: '0000000000',
   country: 'US',
   region: 'CA',
   address1: '1 Market St',
