@@ -3251,7 +3251,7 @@ function AdminOrdersPage({ adminPassword, role }) {
                   if (e == null || order.status === 'cancelled') return null;
                   return <div className="admin-order-earn">You earn ${e.toFixed(2)}</div>;
                 })()}
-                {order.fulfillment_error && order.status !== 'cancelled' && (
+                {role === 'owner' && order.fulfillment_error && order.status !== 'cancelled' && (
                   <div className="admin-fulfill-flag">⚠ Fulfillment issue</div>
                 )}
               </div>
@@ -3394,11 +3394,11 @@ function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh, 
 
       <div className="admin-detail-section">
         <div className="admin-detail-label">Fulfillment</div>
-        {order.fulfillment_error && (
+        {role === 'owner' && order.fulfillment_error && (
           <div className="admin-fulfill-error">
             <div className="admin-fulfill-error-title">⚠ Fulfillment issue</div>
             {order.fulfillment_error}
-            <div className="admin-fulfill-error-hint">A successful Send to Fulfill Engine / Send to Shopify clears this banner.</div>
+            <div className="admin-fulfill-error-hint">A successful Send to Fulfill Engine / Send to Shopify / Send to Printify clears this banner.</div>
           </div>
         )}
         {order.fe_order_id ? (
@@ -3430,6 +3430,23 @@ function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh, 
           } catch (err) { setFulfillMsg(err.message); }
           setBusy(false);
         }}>Send to Shopify</button>
+        <button className="admin-action-btn" style={{ marginTop: 8 }} disabled={busy} onClick={async () => {
+          setBusy(true); setFulfillMsg('Pushing Printify order to production…');
+          try {
+            const res = await fetch('/api/admin/printify-submit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+              body: JSON.stringify({ orderId: order.id }),
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error + (d.detail ? ' — ' + JSON.stringify(d.detail).slice(0, 200) : ''));
+            setFulfillMsg(d.already
+              ? `Printify order ${d.printifyOrderId} is already "${d.status}" — nothing to push.`
+              : `Sent to Printify production ✓ (order ${d.printifyOrderId})`);
+            onRefresh?.();
+          } catch (err) { setFulfillMsg(err.message); }
+          setBusy(false);
+        }}>Send to Printify</button>
         <button className="admin-action-btn" style={{ marginTop: 8, fontSize: 11 }} disabled={busy} onClick={async () => {
           setBusy(true); setFulfillMsg('Fetching FE debug data…');
           try {

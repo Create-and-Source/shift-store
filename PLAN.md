@@ -80,6 +80,14 @@ Trigger: a real $179 order — the C&S app fee ($127) came in $1 under her actua
 - **/dashadmin → Shipping** (new menu page, both roles; staff read-only): edit the per-source tables (owner-only save, `setShippingRates` action in content.js). Owner also gets **"Pull FE actuals"** — FE's invoices API returns per-order `itemCost` / `pickAndPack` / `shipping` actuals keyed by our order uuid (`feShippingActuals()` in the FE lib, `api/admin/shipping-audit.js`). ⚠️ **FE bills pick & pack ON TOP of shipping** — the FE table entry should cover shipping + P&P. Calibrate from that table; defaults shipped as FE $10 + $6/extra, Shopify $5 + $2.50/extra (Tapstitch publishes ~$4.44 + $0.50–$2.20), Printify-fallback $6 + $2, other $10 + $5.
 - `api/printify/shipping.js` still exists but nothing calls it (superseded by `/api/shipping`).
 
+## Printify production-push race + owner-only error trail (2026-07-21)
+
+First live Printify order (#72b5834d) hit a race: the webhook creates the Printify order then immediately pushes to production, but Printify holds fresh orders in status `pending` briefly and the push 400s (code 8502 "not allowed … with status pending"). The order EXISTED in Printify (it produced fine) but the banner said "NOT sent" and no backlink was stored (the update ran after the failed push). Fixes:
+- `sendPrintifyToProductionWithRetry()` — retries ONLY the 8502/pending race (4 attempts, 4s apart); webhook uses it, and `vercel.json` gives `api/webhook.js` `maxDuration: 60` to fund the waits.
+- Webhook stores `printify_order_id` BEFORE the push, and the two failure modes stamp distinct messages (created-but-not-pushed vs not-created).
+- **"Send to Printify" admin button** (`api/admin/printify-submit.js`): never creates — finds the existing Printify order (backlink, else external_id scan of the recent-orders list, since their API can't filter by external_id) and pushes it; if it's already moving, it just clears the banner.
+- **`fulfillment_error` is OWNER-ONLY now (Tovah's call)**: `api/admin/orders.js` GET deletes it for staff (same server-side posture as cost masking) and the UI chip/banner render only for the owner — the partner never sees raw provider error dumps.
+
 ## Customer portal (/account) — reworked 2026-07-20 (email-free auth)
 
 Supabase auth, **Sign In / Sign Up only** (Magic Link removed). **Email confirmation is OFF** — signup logs straight in, no email ever (the built-in sender was dead, and `/checkout` is auth-gated, so unconfirmable accounts blocked ALL purchases). **Forgot password?** on Sign In → reset link → set-new-password card; that reset is the ONLY email the store sends, via custom SMTP (Resend, sender `shift@createandsource.com`, configured in Supabase → Auth → Emails). Buyers auto-created at purchase are passwordless — "Forgot password?" is how they claim their account. RLS verified: customers see only their own orders. Fixed 07-15: Site URL was `localhost:3000`, signup-then-buy account linkage.

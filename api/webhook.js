@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import {
   printifyEnabled,
   createPrintifyOrder,
-  sendPrintifyToProduction,
+  sendPrintifyToProductionWithRetry,
   toPrintifyAddress,
 } from './_lib/printify.js'
 import { shopifyAdminEnabled, createShopifyOrder } from './_lib/shopify.js'
@@ -368,19 +368,26 @@ export default async function handler(req, res) {
           address: toPrintifyAddress(shippingAddress, customerEmail),
         })
 
-        await sendPrintifyToProduction(pfOrder.id)
-        console.log('Printify order submitted:', pfOrder.id, 'for order', order.id)
-
-        // Best-effort backlink; ignore if the column doesn't exist yet.
+        // Backlink BEFORE the production push — if the push fails, the admin
+        // "Send to Printify" button still knows which order to push (and a
+        // re-run can't create a duplicate).
         const { error: linkErr } = await supabase
           .from('orders')
           .update({ printify_order_id: pfOrder.id })
           .eq('id', order.id)
         if (linkErr) console.error('Printify backlink (non-fatal):', linkErr.message)
+
+        try {
+          await sendPrintifyToProductionWithRetry(pfOrder.id)
+          console.log('Printify order submitted:', pfOrder.id, 'for order', order.id)
+        } catch (pushErr) {
+          console.error('Printify production push failed (non-fatal):', pushErr.message, pushErr.body || '')
+          await stampFulfillmentError(order.id, `Printify: order ${pfOrder.id} EXISTS in Printify but the push to production failed: ${pushErr.message} ${JSON.stringify(pushErr.body || '').slice(0, 200)} — click "Send to Printify" to push it (it will NOT be re-created).`)
+        }
       }
     } catch (pfErr) {
       console.error('Printify fulfillment failed (non-fatal):', pfErr.message, pfErr.body || '')
-      await stampFulfillmentError(order.id, `Printify submit FAILED: ${pfErr.message} ${JSON.stringify(pfErr.body || '').slice(0, 300)} — the order was NOT sent to Printify.`)
+      await stampFulfillmentError(order.id, `Printify submit FAILED: ${pfErr.message} ${JSON.stringify(pfErr.body || '').slice(0, 300)} — the order was NOT created in Printify.`)
     }
 
     // ─── Shopify fulfillment ────────────────────────────────────────────

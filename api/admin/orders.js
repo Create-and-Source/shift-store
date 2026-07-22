@@ -79,6 +79,9 @@ export default async function handler(req, res) {
     // server for non-owner eyes.
     if (role !== 'owner') {
       for (const o of data || []) {
+        // Raw provider failure dumps are owner-only (Tovah's call 07-21) —
+        // staff never sees the fulfillment_error trail.
+        delete o.fulfillment_error
         for (const it of o.items || []) {
           if (it.owner_price != null) it.cost = it.owner_price
           delete it.owner_price

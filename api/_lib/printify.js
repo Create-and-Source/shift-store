@@ -221,6 +221,40 @@ export async function sendPrintifyToProduction(orderId) {
   return pf(`/shops/${shopId}/orders/${orderId}/send_to_production.json`, { method: 'POST' })
 }
 
+// A freshly created order briefly sits in status "pending" while Printify
+// processes it, and send_to_production 400s (code 8502) until it flips to
+// "on-hold" — pushing immediately after create is a race. Retry that one
+// specific error with waits; anything else throws straight through.
+export async function sendPrintifyToProductionWithRetry(orderId, { attempts = 4, waitMs = 4000 } = {}) {
+  let lastErr
+  for (let i = 0; i < attempts; i++) {
+    if (i) await new Promise(r => setTimeout(r, waitMs))
+    try {
+      return await sendPrintifyToProduction(orderId)
+    } catch (err) {
+      lastErr = err
+      const s = `${err.message} ${JSON.stringify(err.body || '')}`
+      if (!/8502|status pending/i.test(s)) throw err
+    }
+  }
+  throw lastErr
+}
+
+// Locate an order by our external_id (their list API has no filter for it) —
+// the repair path for orders that were created but whose backlink never got
+// stored. Scans the two most recent pages.
+export async function findPrintifyOrderByExternalId(externalId) {
+  const shopId = await getShopId()
+  for (const page of [1, 2]) {
+    const r = await pf(`/shops/${shopId}/orders.json?limit=50&page=${page}`)
+    const rows = r?.data || []
+    const hit = rows.find(o => String(o.external_id) === String(externalId))
+    if (hit) return hit
+    if (!rows.length) break
+  }
+  return null
+}
+
 // Fetch a single Printify order (includes `status` and `shipments`, each of
 // which carries { carrier, number, url, delivered_at } once it ships).
 export async function getPrintifyOrder(orderId) {
