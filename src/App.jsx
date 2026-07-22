@@ -2640,7 +2640,7 @@ function AdminSubscribersPage({ adminPassword }) {
 // passes through to Create & Source).
 const SHIP_SOURCES = [
   { key: 'fulfillengine', label: 'Fulfill Engine', note: 'Main apparel line. No rate API — set this from the actuals below. FE bills shipping AND pick & pack per order; this rate should cover both.' },
-  { key: 'shopify', label: 'Shopify · Tapstitch', note: 'Traffic line. Tapstitch publishes roughly $4.44 first item + $0.50–$2.20 each additional, varying by garment weight.' },
+  { key: 'shopify', label: 'Shopify · Tapstitch', note: 'Traffic line. Real Tapstitch bills run ~$4.50 PER ITEM flat (a 5-item order shipped for $22.30) — their published “$0.50 per extra” tee rate does not match actual invoices.' },
   { key: 'printify', label: 'Printify (backup only)', note: 'Checkout quotes Printify’s live rate — this row is only charged if their API is down.' },
   { key: 'other', label: 'Everything else', note: 'Safety bucket for items without a recognized supplier.' },
 ];

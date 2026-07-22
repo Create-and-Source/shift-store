@@ -14,11 +14,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-// FE bills shipping AND pick-and-pack per order (see /dashadmin → Shipping →
-// FE actuals) — its table entries should cover both.
+// Calibrated 2026-07-21 from real supplier bills, not published rates:
+// - FE bills a shipping label + $0.50/item POD charge (the FE entry covers
+//   both): invoices showed 2 items $10.24 / 5 $16.28 / 7 $22.26 labels →
+//   8.50 + 3.00/additional sits $0.15–$1.75 above actuals at every size.
+// - Tapstitch (shopify) billed a real 5-item order $22.30 Special Line —
+//   ~$4.46/item FLAT, far above their published tee example, so both fields
+//   carry the same per-item rate.
 export const DEFAULT_RATES = {
-  fulfillengine: { first: 10, additional: 6 },
-  shopify: { first: 5, additional: 2.5 },
+  fulfillengine: { first: 8.5, additional: 3 },
+  shopify: { first: 4.5, additional: 4.5 },
   printify: { first: 6, additional: 2 }, // fallback only — live quote wins
   other: { first: 10, additional: 5 },
 }

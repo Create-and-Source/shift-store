@@ -123,7 +123,7 @@ Three organic orders within ~40 min: Michael Sperando $41.99 (#0e39c000), Genaro
 
 ## Open items
 
-0. **Calibrate the shipping tables** (/dashadmin → Shipping): pull FE actuals once FE invoices the live orders, set the Fulfill Engine first/additional so it covers shipping + pick & pack; sanity-check a Tapstitch order's real bill against the Shopify table. Until calibrated, the defaults (FE $10+$6) are educated guesses — better than the old flat $10 but not proven.
+0. ~~Calibrate the shipping tables~~ **DONE 2026-07-21 from real supplier bills**: FE (3 invoices: 2-item $10.24 / 5-item $16.28 / 7-item $22.26 labels + $0.50/item POD charge) → **$8.50 + $3.00/additional**; Tapstitch (Carly's $179.95 order billed $128.19 incl. **$22.30 shipping on 5 items ≈ $4.46/item FLAT** — that was the "$22 not $10" discovery; published tee rates are fiction) → **$4.50 + $4.50/item**. ⚠️ NEW: that Tapstitch order fulfilled **"International — Special Line", 10–17 days** despite the 07-20 U.S.-fulfillment setting — check in Tapstitch why (products possibly not stocked U.S.); customer is waiting ~2.5 weeks.
 1. **Hand off staff access**: text the partner the STAFF_KEY password + shiftapparelco.com/dashadmin.
 1b. **Stripe review** (Shift Apparel LLC) — clears ~2–3 days from 07-20; charges worked during review but watch for the account-status banner.
 1c. **shift@createandsource.com must RECEIVE mail** — the policy pages tell customers to email it; add it as a Google Workspace alias (or tell Claude a different address to print).
