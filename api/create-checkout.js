@@ -1,7 +1,7 @@
 import Stripe from 'stripe'
-import { printifyEnabled, getPrintifyStandardShipping } from './_lib/printify.js'
 import { feEnabled, feAvailability, comboKey } from './_lib/fulfillengine.js'
 import { getOwnerPrices } from './_lib/adminRole.js'
+import { computeCartShipping } from './_lib/shipping.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
@@ -46,16 +46,13 @@ async function csShareCents(items, shippingCost, host) {
   return Math.max(0, Math.round(share * 100))
 }
 
-// Flat shipping for non-Printify (Fulfill Engine / static) items.
-const FLAT_SHIPPING = 10
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
   try {
-    const { items, shipping = 0, customerEmail } = req.body
+    const { items, customerEmail } = req.body
 
     if (!items || !items.length) {
       return res.status(400).json({ error: 'No items provided' })
@@ -104,27 +101,19 @@ export default async function handler(req, res) {
     })
 
     // Authoritative shipping, computed server-side (never trust the client):
-    // live Printify rate for Printify items + a flat rate for any items from
-    // other providers (they ship as a separate parcel). Falls back to flat on
-    // any Printify error so checkout is never blocked.
-    const flatBase = typeof shipping === 'number' && shipping > 0 ? shipping : FLAT_SHIPPING
-    const printifyLineItems = items
-      .filter(i => i.source === 'printify' && i.printifyProductId && i.printifyVariantId)
-      .map(i => ({ product_id: i.printifyProductId, variant_id: Number(i.printifyVariantId), quantity: i.qty }))
-    const hasOther = items.some(i => (i.source || 'static') !== 'printify')
-
+    // one leg per supplier — live Printify rate + admin-set rate tables for
+    // Fulfill Engine / Shopify (no quote APIs). Same quote the checkout page
+    // showed via /api/shipping. Falls back to flat per-leg on total failure
+    // so checkout is never blocked.
     let shippingCost = 0
-    if (printifyLineItems.length && printifyEnabled()) {
-      try {
-        const pfShip = await getPrintifyStandardShipping(printifyLineItems)
-        shippingCost += pfShip != null ? pfShip : flatBase
-      } catch (err) {
-        console.error('Printify shipping calc failed, using flat:', err.message)
-        shippingCost += flatBase
-      }
+    try {
+      const quote = await computeCartShipping(items)
+      shippingCost = quote.total
+    } catch (err) {
+      console.error('Shipping quote failed — flat per-leg fallback:', err.message)
+      shippingCost = new Set(items.map(i => i.source || 'other')).size * 10
     }
-    if (hasOther) shippingCost += flatBase
-    if (shippingCost <= 0) shippingCost = flatBase // safety net
+    if (shippingCost <= 0) shippingCost = 10 // safety net
 
     lineItems.push({
       price_data: {

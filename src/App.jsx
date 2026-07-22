@@ -192,7 +192,6 @@ function CartProvider({ children }) {
             printifyProductId: i.product.printifyProductId || '',
             printifyVariantId: i.printifyVariantId || 0,
           })),
-          shipping: 10,
           customerEmail: user?.email || '',
         }),
       });
@@ -1190,7 +1189,7 @@ const POLICY_PAGES = {
     title: 'Shipping',
     body: [
       'Every Shift piece is made to order. Production takes 2–7 business days, and delivery adds another 3–10 business days depending on the item and where you are.',
-      'Shipping is calculated at checkout. Once your order ships, tracking appears automatically in your account under My Orders — no need to email us; the tracking link updates in real time from our production partners.',
+      'Shipping is calculated at checkout, per package. Pieces ship straight from the production line that makes them, so an order can arrive in more than one package — each with its own tracking. Once your order ships, tracking appears automatically in your account under My Orders — no need to email us; the tracking link updates in real time from our production partners.',
       'We currently ship within the United States.',
     ],
   },
@@ -1239,44 +1238,44 @@ function PolicyPage() {
   );
 }
 
-const FLAT_SHIPPING = 10;
-
 function CheckoutPage() {
   const { cart, updateQty, cartTotal, checkout, checkingOut, checkoutError } = useCart();
   const { products } = useProducts();
   const navigate = useNavigate();
   const [selectedSuggestion, setSelectedSuggestion] = useState(null);
 
-  // Live shipping: real Printify rate for Printify items + flat for others.
-  const hasPrintify = cart.some(i => i.product.source === 'printify');
-  const hasOther = cart.some(i => (i.product.source || 'static') !== 'printify');
-  const [pfShipping, setPfShipping] = useState(null);
-  const [shipLoading, setShipLoading] = useState(hasPrintify);
+  // Live shipping quote — one leg per supplier (each ships its own parcel):
+  // Printify's live rate + the admin-set tables for Fulfill Engine / Shopify.
+  // create-checkout recomputes the same quote server-side.
+  const [shipQuote, setShipQuote] = useState(null);
+  const [shipLoading, setShipLoading] = useState(cart.length > 0);
 
   useEffect(() => {
-    if (!hasPrintify) { setPfShipping(0); setShipLoading(false); return; }
+    if (!cart.length) { setShipQuote(null); setShipLoading(false); return; }
     let cancelled = false;
     setShipLoading(true);
-    fetch('/api/printify/shipping', {
+    fetch('/api/shipping', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         items: cart.map(i => ({
-          source: i.product.source || 'static',
+          source: i.product.source || 'other',
+          qty: i.qty,
           printifyProductId: i.product.printifyProductId || '',
           printifyVariantId: i.printifyVariantId || 0,
-          qty: i.qty,
         })),
       }),
     })
       .then(r => r.json())
-      .then(d => { if (!cancelled) setPfShipping(typeof d.shipping === 'number' ? d.shipping : FLAT_SHIPPING); })
-      .catch(() => { if (!cancelled) setPfShipping(FLAT_SHIPPING); })
+      .then(d => { if (!cancelled) setShipQuote(typeof d.shipping === 'number' ? d : null); })
+      .catch(() => { if (!cancelled) setShipQuote(null); })
       .finally(() => { if (!cancelled) setShipLoading(false); });
     return () => { cancelled = true; };
-  }, [cart, hasPrintify]);
+  }, [cart]);
 
-  const shippingTotal = (hasPrintify ? (pfShipping ?? FLAT_SHIPPING) : 0) + (hasOther ? FLAT_SHIPPING : 0);
+  const shippingTotal = shipQuote ? shipQuote.shipping : null;
+  const shipKnown = !shipLoading && shippingTotal != null;
+  const shipLegs = shipQuote?.legs?.length || 0;
 
   const cartProductIds = new Set(cart.map(i => i.product.id));
   const suggestions = products.filter(p => !cartProductIds.has(p.id)).slice(0, 6);
@@ -1337,15 +1336,20 @@ function CheckoutPage() {
               </div>
               <div className="ck-summary-row">
                 <span>Shipping</span>
-                {!hasPrintify
-                  ? <span style={{ fontSize: 12, color: 'var(--gray)' }}>Calculated at payment</span>
-                  : shipLoading
-                    ? <span style={{ fontSize: 12, color: 'var(--gray)' }}>Calculating…</span>
-                    : <span>${shippingTotal.toFixed(2)}</span>}
+                {shipLoading
+                  ? <span style={{ fontSize: 12, color: 'var(--gray)' }}>Calculating…</span>
+                  : shipKnown
+                    ? <span>${shippingTotal.toFixed(2)}</span>
+                    : <span style={{ fontSize: 12, color: 'var(--gray)' }}>Calculated at payment</span>}
               </div>
+              {shipKnown && shipLegs > 1 && (
+                <div style={{ fontSize: 11, color: 'var(--gray)', marginTop: -8, marginBottom: 10 }}>
+                  Ships in {shipLegs} packages — straight from each production line.
+                </div>
+              )}
               <div className="ck-summary-row ck-summary-total">
-                <span>{hasPrintify && !shipLoading ? 'Total' : 'Estimated Total'}</span>
-                <span>${(cartTotal + (hasPrintify && !shipLoading ? shippingTotal : 0)).toFixed(2)}</span>
+                <span>{shipKnown ? 'Total' : 'Estimated Total'}</span>
+                <span>${(cartTotal + (shipKnown ? shippingTotal : 0)).toFixed(2)}</span>
               </div>
               {checkoutError && <div className="ck-error">{checkoutError}</div>}
               <button className="ck-pay-btn" onClick={checkout} disabled={checkingOut}>
@@ -2418,6 +2422,7 @@ function AdminDashboard({ adminPassword, role }) {
             <button className={adminPage === 'media' ? 'active' : ''} onClick={() => { setAdminPage('media'); setMenuOpen(false); }}>Media</button>
             <button className={adminPage === 'orders' ? 'active' : ''} onClick={() => { setAdminPage('orders'); setMenuOpen(false); }}>Orders</button>
             <button className={adminPage === 'subscribers' ? 'active' : ''} onClick={() => { setAdminPage('subscribers'); setMenuOpen(false); }}>Subscribers</button>
+            <button className={adminPage === 'shipping' ? 'active' : ''} onClick={() => { setAdminPage('shipping'); setMenuOpen(false); }}>Shipping</button>
             <button className={adminPage === 'atcost' ? 'active' : ''} onClick={() => { setAdminPage('atcost'); setMenuOpen(false); }}>Order at Cost</button>
           </nav>
         </div>
@@ -2427,6 +2432,7 @@ function AdminDashboard({ adminPassword, role }) {
       {adminPage === 'products' && <AdminProductsPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'media' && <AdminMediaPage adminPassword={adminPassword} />}
       {adminPage === 'subscribers' && <AdminSubscribersPage adminPassword={adminPassword} />}
+      {adminPage === 'shipping' && <AdminShippingPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'atcost' && <AdminOrderAtCostPage adminPassword={adminPassword} />}
     </div>
   );
@@ -2503,7 +2509,6 @@ function AdminOrderAtCostPage({ adminPassword }) {
             printifyProductId: i.product.printifyProductId || '',
             printifyVariantId: i.printifyVariantId || 0,
           })),
-          shipping: 10,
         }),
       });
       const data = await res.json();
@@ -2623,6 +2628,173 @@ function AdminSubscribersPage({ adminPassword }) {
               <small>{new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</small>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Shipping rate tables for the suppliers with no quote API. Printify quotes
+// live at checkout; its row here only covers API outages. Owner edits, staff
+// sees read-only (the rates set what customers pay AND what the settlement
+// passes through to Create & Source).
+const SHIP_SOURCES = [
+  { key: 'fulfillengine', label: 'Fulfill Engine', note: 'Main apparel line. No rate API — set this from the actuals below. FE bills shipping AND pick & pack per order; this rate should cover both.' },
+  { key: 'shopify', label: 'Shopify · Tapstitch', note: 'Traffic line. Tapstitch publishes roughly $4.44 first item + $0.50–$2.20 each additional, varying by garment weight.' },
+  { key: 'printify', label: 'Printify (backup only)', note: 'Checkout quotes Printify’s live rate — this row is only charged if their API is down.' },
+  { key: 'other', label: 'Everything else', note: 'Safety bucket for items without a recognized supplier.' },
+];
+
+function AdminShippingPage({ adminPassword, role }) {
+  const [rates, setRates] = useState(null);
+  const [msg, setMsg] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [audit, setAudit] = useState(null);
+  const isOwner = role === 'owner';
+
+  useEffect(() => {
+    fetch('/api/admin/content', { headers: { 'x-admin-key': adminPassword } })
+      .then(r => r.json())
+      .then(d => setRates(d.shippingRates || {}))
+      .catch(() => setRates({}));
+  }, []);
+
+  const setField = (src, field, val) =>
+    setRates(r => ({ ...r, [src]: { ...(r[src] || {}), [field]: val } }));
+
+  const save = async () => {
+    setSaving(true); setMsg('');
+    try {
+      const res = await fetch('/api/admin/content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+        body: JSON.stringify({ action: 'setShippingRates', rates }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Save failed');
+      setRates(d.shippingRates);
+      setMsg('Saved — new carts quote these rates immediately.');
+    } catch (err) {
+      setMsg(err.message);
+    }
+    setSaving(false);
+  };
+
+  const loadAudit = async () => {
+    setAudit({ loading: true });
+    try {
+      const d = await fetch('/api/admin/shipping-audit', { headers: { 'x-admin-key': adminPassword } }).then(r => r.json());
+      setAudit(d);
+    } catch {
+      setAudit({ error: 'Could not load Fulfill Engine invoices' });
+    }
+  };
+
+  if (rates == null) return <div style={{ textAlign: 'center', padding: 60 }}><Loader size={24} className="spin" /></div>;
+
+  const money = n => (typeof n === 'number' ? `$${n.toFixed(2)}` : '—');
+
+  return (
+    <div className="admin-subs">
+      <div className="admin-subs-head">
+        <div>
+          <h2>Shipping</h2>
+          <p>
+            {isOwner
+              ? 'What customers pay per supplier package. Printify is quoted live; the rest use these tables.'
+              : 'What customers pay per supplier package. Set by Create & Source — shipping is passed through in the Friday settlement.'}
+            {msg ? ` · ${msg}` : ''}
+          </p>
+        </div>
+        {isOwner && (
+          <button onClick={save} disabled={saving}>
+            {saving ? 'Saving…' : 'Save rates'}
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gap: 14 }}>
+        {SHIP_SOURCES.map(s => (
+          <div key={s.key} style={{ border: '1px solid rgba(255,255,255,.12)', padding: '14px 16px' }}>
+            <div style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 13, marginBottom: 4 }}>{s.label}</div>
+            <div style={{ fontSize: 12, color: 'var(--gray)', marginBottom: 10 }}>{s.note}</div>
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 12, color: 'var(--gray)' }}>
+                First item{' '}
+                <input
+                  type="number" min="0" step="0.01"
+                  value={rates[s.key]?.first ?? ''}
+                  disabled={!isOwner}
+                  onChange={e => setField(s.key, 'first', e.target.value)}
+                  style={{ width: 80, marginLeft: 6 }}
+                />
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--gray)' }}>
+                Each additional{' '}
+                <input
+                  type="number" min="0" step="0.01"
+                  value={rates[s.key]?.additional ?? ''}
+                  disabled={!isOwner}
+                  onChange={e => setField(s.key, 'additional', e.target.value)}
+                  style={{ width: 80, marginLeft: 6 }}
+                />
+              </label>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {isOwner && (
+        <div style={{ marginTop: 28 }}>
+          <div className="admin-subs-head">
+            <div>
+              <h2 style={{ fontSize: 16 }}>What Fulfill Engine actually charged</h2>
+              <p>Per-order actuals from FE’s invoices — item cost, pick & pack, and shipping. Use these to set the Fulfill Engine table above.</p>
+            </div>
+            <button onClick={loadAudit} disabled={audit?.loading}>
+              {audit?.loading ? 'Loading…' : audit ? 'Reload' : 'Pull FE actuals'}
+            </button>
+          </div>
+          {audit && !audit.loading && (
+            audit.error ? (
+              <div className="admin-subs-empty">FE error: {audit.error}</div>
+            ) : !audit.enabled ? (
+              <div className="admin-subs-empty">Fulfill Engine API key not set.</div>
+            ) : !(audit.orders || []).length ? (
+              <div className="admin-subs-empty">No invoiced FE orders in the last 90 days yet — FE invoices after it ships.</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: 'var(--gray)' }}>
+                      <th style={{ padding: '6px 8px' }}>Invoiced</th>
+                      <th style={{ padding: '6px 8px' }}>Order</th>
+                      <th style={{ padding: '6px 8px' }}>Items</th>
+                      <th style={{ padding: '6px 8px' }}>Pick & pack</th>
+                      <th style={{ padding: '6px 8px' }}>Shipping</th>
+                      <th style={{ padding: '6px 8px' }}>Ship + P&P</th>
+                      <th style={{ padding: '6px 8px' }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {audit.orders.map((o, idx) => (
+                      <tr key={idx} style={{ borderTop: '1px solid rgba(255,255,255,.08)' }}>
+                        <td style={{ padding: '6px 8px' }}>{o.invoiceDate ? new Date(o.invoiceDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</td>
+                        <td style={{ padding: '6px 8px', fontFamily: 'monospace' }}>{(o.customId || o.orderId || '').slice(0, 8)}</td>
+                        <td style={{ padding: '6px 8px' }}>{money(o.itemCost)}</td>
+                        <td style={{ padding: '6px 8px' }}>{money(o.pickAndPack)}</td>
+                        <td style={{ padding: '6px 8px' }}>{money(o.shipping)}</td>
+                        <td style={{ padding: '6px 8px', fontWeight: 700 }}>
+                          {money((Number(o.shipping) || 0) + (Number(o.pickAndPack) || 0))}
+                        </td>
+                        <td style={{ padding: '6px 8px' }}>{money(o.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
         </div>
       )}
     </div>

@@ -36,6 +36,41 @@ export async function testFEAuth() {
   return feFetch('/authentication-test')
 }
 
+// What FE ACTUALLY billed, per order — invoices carry per-order item cost,
+// pick-and-pack, and shipping actuals; customId is our order uuid. This is
+// the calibration source for the fulfillengine rate table on
+// /dashadmin → Shipping (their table entries should cover shipping + P&P).
+export async function feShippingActuals(days = 90) {
+  const minDateCreated = new Date(Date.now() - days * 86400e3).toISOString()
+  const resp = await feFetch('/invoices', {
+    method: 'POST',
+    body: JSON.stringify({ minDateCreated }),
+  })
+  const invoices = (resp?.invoices || [])
+    .sort((a, b) => new Date(b.dateCreated) - new Date(a.dateCreated))
+    .slice(0, 12)
+  const orders = []
+  for (const inv of invoices) {
+    try {
+      const r = await feFetch(`/invoices/${inv.id}/orders`)
+      for (const o of r?.orders || []) {
+        orders.push({
+          invoiceDate: inv.dateCreated,
+          orderId: o.orderId,
+          customId: o.customId,
+          itemCost: o.accountInvoiceItemCost,
+          pickAndPack: o.accountInvoicePickAndPack,
+          shipping: o.accountInvoiceShipping,
+          total: o.accountInvoiceTotal,
+        })
+      }
+    } catch (err) {
+      console.error(`FE invoice ${inv.id} orders failed:`, err.message)
+    }
+  }
+  return { invoices, orders }
+}
+
 // Tracking for a submitted FE order (the id createFEOrder returned).
 // Shipments carry trackingNumber/trackingUrl once FE ships; returns
 // { number, url } for the first tracked, non-canceled shipment, else null.

@@ -70,6 +70,16 @@ Tovah's pick over holding the money herself: **the LLC stays merchant of record;
 
 Once proven, the Friday settlement panel = verification/history, not a to-do (money already split per-charge). Note: platform payouts follow Tovah's payout schedule. Stripe-dashboard automation gotchas: the account-switcher menu click SIGNS YOU OUT (lost the session once — navigate by direct `/acct_…/` URLs instead); the Workbench event picker's search only filters the ACTIVE tab (switch to "All events" first).
 
+## Real per-supplier shipping (added 2026-07-21)
+
+Trigger: a real $179 order — the C&S app fee ($127) came in $1 under her actual supplier bill ($128) because the store charged the customer a flat $10 shipping while real shipping was ~$22. **The flat $10 is gone**: shipping is now quoted per supplier leg (each supplier ships its own parcel; a mixed cart pays the sum).
+
+- **`api/_lib/shipping.js`** — `computeCartShipping(items)`: Printify = live API rate (falls back to table on error); Fulfill Engine + Shopify/Tapstitch have NO quote APIs, so they price from **first-item + each-additional rate tables** stored in `store_settings` key `shipping_rates` (migration `supabase-store-settings.sql`), merged over `DEFAULT_RATES` per-field. Sources: `fulfillengine` / `shopify` / `printify` / `other`. Every failure charges the table/default — checkout is never blocked.
+- **`/api/shipping`** — public quote endpoint; the checkout page shows it live (with a "ships in N packages" note on multi-leg carts) and `create-checkout` recomputes the same quote server-side. **The client-supplied `shipping` field is dead** — it used to be trusted (a shopper could POST `shipping: 0.01`).
+- **The app fee / settlement picks the new number up automatically** — shipping was already part of the C&S share formula; now the number is real instead of $10.
+- **/dashadmin → Shipping** (new menu page, both roles; staff read-only): edit the per-source tables (owner-only save, `setShippingRates` action in content.js). Owner also gets **"Pull FE actuals"** — FE's invoices API returns per-order `itemCost` / `pickAndPack` / `shipping` actuals keyed by our order uuid (`feShippingActuals()` in the FE lib, `api/admin/shipping-audit.js`). ⚠️ **FE bills pick & pack ON TOP of shipping** — the FE table entry should cover shipping + P&P. Calibrate from that table; defaults shipped as FE $10 + $6/extra, Shopify $5 + $2.50/extra (Tapstitch publishes ~$4.44 + $0.50–$2.20), Printify-fallback $6 + $2, other $10 + $5.
+- `api/printify/shipping.js` still exists but nothing calls it (superseded by `/api/shipping`).
+
 ## Customer portal (/account) — reworked 2026-07-20 (email-free auth)
 
 Supabase auth, **Sign In / Sign Up only** (Magic Link removed). **Email confirmation is OFF** — signup logs straight in, no email ever (the built-in sender was dead, and `/checkout` is auth-gated, so unconfirmable accounts blocked ALL purchases). **Forgot password?** on Sign In → reset link → set-new-password card; that reset is the ONLY email the store sends, via custom SMTP (Resend, sender `shift@createandsource.com`, configured in Supabase → Auth → Emails). Buyers auto-created at purchase are passwordless — "Forgot password?" is how they claim their account. RLS verified: customers see only their own orders. Fixed 07-15: Site URL was `localhost:3000`, signup-then-buy account linkage.
@@ -91,7 +101,7 @@ Supabase auth, **Sign In / Sign Up only** (Magic Link removed). **Email confirma
 
 ## Stripe account (switched 2026-07-20)
 
-Payments run through the **Shift Apparel LLC** Stripe account (`acct_1TvRRgFUHp82gpm3`) — switched from the original shared account. Webhook destination "shift-store orders" (checkout.session.completed, API version 2026-06-24.dahlia) → /api/webhook. At switch time the account was **under Stripe review (2–3 days)** — a "can't accept payments" checkout error before review clears is Stripe, not the store. The two 07-20 test payments live in the OLD account (refund there if desired). Stripe Tax — DECIDED 2026-07-20: **no sales-tax permit / no registrations by choice**. Threshold monitoring is ON (Stripe alerts if any state's economic-nexus numbers approach); checkout charges NO tax anywhere, and `automatic_tax` is intentionally NOT enabled in create-checkout (it would no-op without a registration). If she ever registers: enable `automatic_tax` + move the flat-$10 shipping line-item to a real shipping rate + set the Clothing product tax category. `SHOPIFY_WEBHOOK_SECRET` was rotated during the switch — "Enable real-time" must be clicked once after any rotation to re-register with the fresh token.
+Payments run through the **Shift Apparel LLC** Stripe account (`acct_1TvRRgFUHp82gpm3`) — switched from the original shared account. Webhook destination "shift-store orders" (checkout.session.completed, API version 2026-06-24.dahlia) → /api/webhook. At switch time the account was **under Stripe review (2–3 days)** — a "can't accept payments" checkout error before review clears is Stripe, not the store. The two 07-20 test payments live in the OLD account (refund there if desired). Stripe Tax — DECIDED 2026-07-20: **no sales-tax permit / no registrations by choice**. Threshold monitoring is ON (Stripe alerts if any state's economic-nexus numbers approach); checkout charges NO tax anywhere, and `automatic_tax` is intentionally NOT enabled in create-checkout (it would no-op without a registration). If she ever registers: enable `automatic_tax` + move the shipping line-item (now the real per-supplier quote, 2026-07-21) to a Stripe shipping rate + set the Clothing product tax category. `SHOPIFY_WEBHOOK_SECRET` was rotated during the switch — "Enable real-time" must be clicked once after any rotation to re-register with the fresh token.
 
 ## State at end of 2026-07-20 (the marathon session)
 
@@ -105,6 +115,7 @@ Three organic orders within ~40 min: Michael Sperando $41.99 (#0e39c000), Genaro
 
 ## Open items
 
+0. **Calibrate the shipping tables** (/dashadmin → Shipping): pull FE actuals once FE invoices the live orders, set the Fulfill Engine first/additional so it covers shipping + pick & pack; sanity-check a Tapstitch order's real bill against the Shopify table. Until calibrated, the defaults (FE $10+$6) are educated guesses — better than the old flat $10 but not proven.
 1. **Hand off staff access**: text the partner the STAFF_KEY password + shiftapparelco.com/dashadmin.
 1b. **Stripe review** (Shift Apparel LLC) — clears ~2–3 days from 07-20; charges worked during review but watch for the account-status banner.
 1c. **shift@createandsource.com must RECEIVE mail** — the policy pages tell customers to email it; add it as a Google Workspace alias (or tell Claude a different address to print).

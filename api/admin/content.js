@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { roleFromReq, getOwnerPrices } from '../_lib/adminRole.js'
+import { getShippingRates, RATE_SOURCES } from '../_lib/shipping.js'
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
@@ -52,6 +53,7 @@ export default async function handler(req, res) {
       const payload = {
         overrides,
         customProducts: (customRows || []).map(mapCustomProduct),
+        shippingRates: await getShippingRates(),
       }
       // The private price layer rides along ONLY for the owner — the public
       // storefront and staff logins never receive it.
@@ -104,6 +106,35 @@ export default async function handler(req, res) {
       const { error } = await supabase.from('owner_prices').upsert(rows, { onConflict: 'product_id' })
       if (error) return res.status(500).json({ error: error.message })
       return res.status(200).json({ ok: true, count: rows.length })
+    }
+
+    // Owner-only: the shipping rate tables for the no-quote-API legs
+    // (Fulfill Engine / Shopify). What customers pay AND what the settlement
+    // passes through — so the partner can see them but not set them.
+    if (action === 'setShippingRates') {
+      if (role !== 'owner') return res.status(403).json({ error: 'Not allowed' })
+      const clean = {}
+      for (const src of RATE_SOURCES) {
+        const r = (req.body.rates || {})[src]
+        if (!r) continue
+        const first = Number(r.first)
+        const additional = Number(r.additional)
+        if (!isFinite(first) || first < 0 || !isFinite(additional) || additional < 0) {
+          return res.status(400).json({ error: `Invalid rate for ${src}` })
+        }
+        clean[src] = { first: +first.toFixed(2), additional: +additional.toFixed(2) }
+      }
+      if (!Object.keys(clean).length) return res.status(400).json({ error: 'No rates given' })
+      const { error } = await supabase.from('store_settings').upsert(
+        { key: 'shipping_rates', value: clean, updated_at: new Date().toISOString() },
+        { onConflict: 'key' }
+      )
+      if (error) {
+        return res.status(500).json({
+          error: `${error.message} — if the table is missing, run supabase-store-settings.sql`,
+        })
+      }
+      return res.status(200).json({ ok: true, shippingRates: await getShippingRates() })
     }
 
     if (action === 'setOverride') {
