@@ -88,9 +88,18 @@ First live Printify order (#72b5834d) hit a race: the webhook creates the Printi
 - **"Send to Printify" admin button** (`api/admin/printify-submit.js`): never creates — finds the existing Printify order (backlink, else external_id scan of the recent-orders list, since their API can't filter by external_id) and pushes it; if it's already moving, it just clears the banner.
 - **`fulfillment_error` is OWNER-ONLY now (Tovah's call)**: `api/admin/orders.js` GET deletes it for staff (same server-side posture as cost masking) and the UI chip/banner render only for the owner — the partner never sees raw provider error dumps.
 
+## Guest checkout — NO ACCOUNT REQUIRED (2026-07-24)
+
+**Buying takes zero signup.** `/checkout` is an open route (the `RequireAuth` wrapper is gone) and the cart drawer goes straight there; "Have an account? Sign in" is a quiet secondary link, never a gate. The backend never required an account — `create-checkout` has always treated `customerEmail` as optional (Stripe Checkout collects it at payment) and the webhook builds the `customers` row **and its Supabase auth user** from `session.customer_details.email` either way. So a guest order is fully recorded, fulfilled, and emailed exactly like a signed-in one.
+
+- **Checkout summary** states it plainly ("Guest checkout — no account needed…") or names the signed-in email ("Ordering as …").
+- **/account** shows "Continue as guest" whenever a cart is waiting — nobody who lands there is trapped.
+- **/order-success → `/account?claim=1`** opens the page straight in reset mode: the guest's auth user already exists (webhook-created, passwordless), so the reset link is how they set a password and unlock the order history that is already theirs (RLS matches on `auth_id`, which was stamped at purchase).
+- **Tracking needs no account** — the shipped email carries it; the portal is a bonus. Shipping policy copy says so.
+
 ## Customer portal (/account) — reworked 2026-07-20 (email-free auth)
 
-Supabase auth, **Sign In / Sign Up only** (Magic Link removed). **Email confirmation is OFF** — signup logs straight in, no email ever (the built-in sender was dead, and `/checkout` is auth-gated, so unconfirmable accounts blocked ALL purchases). **Forgot password?** on Sign In → reset link → set-new-password card; that reset is the ONLY email the store sends, via custom SMTP (Resend, sender `shift@createandsource.com`, configured in Supabase → Auth → Emails). Buyers auto-created at purchase are passwordless — "Forgot password?" is how they claim their account. RLS verified: customers see only their own orders. Fixed 07-15: Site URL was `localhost:3000`, signup-then-buy account linkage.
+Supabase auth, **Sign In / Sign Up only** (Magic Link removed). **Email confirmation is OFF** — signup logs straight in, no email ever (the built-in sender was dead, and back when `/checkout` was auth-gated an unconfirmable account blocked ALL purchases; guest checkout has since removed that gate entirely). **Forgot password?** on Sign In → reset link → set-new-password card; that reset is the ONLY email the store sends, via custom SMTP (Resend, sender `shift@createandsource.com`, configured in Supabase → Auth → Emails). Buyers auto-created at purchase are passwordless — "Forgot password?" is how they claim their account. RLS verified: customers see only their own orders. Fixed 07-15: Site URL was `localhost:3000`, signup-then-buy account linkage.
 
 ## Data (Supabase)
 
