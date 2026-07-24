@@ -1414,6 +1414,20 @@ img { max-width: 100%; display: block; }
   box-shadow: 0 0 20px rgba(229,0,0,0.3);
 }
 
+.cart-signin-link {
+  width: 100%;
+  background: none; border: none;
+  color: var(--gray);
+  font-size: 12px;
+  margin-top: 12px;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.2s;
+}
+.cart-signin-link:hover { color: var(--white); }
+
 .cart-empty {
   flex: 1; display: flex; flex-direction: column;
   align-items: center; justify-content: center;
@@ -1957,6 +1971,28 @@ img { max-width: 100%; display: block; }
   margin-top: 14px;
   text-align: center;
 }
+
+.ck-guest {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--gray);
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-bottom: 16px;
+}
+.ck-guest strong { color: var(--white); font-weight: 600; }
+.ck-guest-link {
+  display: block;
+  background: none; border: none; padding: 0;
+  margin-top: 8px;
+  color: var(--gray);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.2s;
+}
+.ck-guest-link:hover { color: var(--white); }
 
 .ck-suggestions {
   margin-top: 60px;
@@ -3214,6 +3250,26 @@ img { max-width: 100%; display: block; }
   text-underline-offset: 3px;
 }
 .portal-forgot:hover { color: #fff; }
+
+.portal-guest {
+  width: 100%;
+  margin-top: 18px;
+  padding: 12px;
+  background: none;
+  border: 1px solid var(--gray-dim);
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.3s;
+}
+.portal-guest:hover { border-color: #fff; color: #fff; }
 
 .portal-btn {
   width: 100%;

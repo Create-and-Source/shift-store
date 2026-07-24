@@ -122,16 +122,6 @@ function AuthProvider({ children }) {
 
 function useAuth() { return useContext(AuthContext); }
 
-function RequireAuth({ children }) {
-  const { user, loading } = useAuth();
-  const navigate = useNavigate();
-  useEffect(() => {
-    if (!loading && !user) navigate('/account', { replace: true });
-  }, [user, loading, navigate]);
-  if (loading) return <div style={{ padding: '200px 0', textAlign: 'center' }}><Loader size={24} className="spin" /></div>;
-  return user ? children : null;
-}
-
 const CartContext = createContext();
 
 function CartProvider({ children }) {
@@ -368,13 +358,15 @@ function CartDrawer() {
                 <span>${cartTotal.toFixed(2)}</span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--gray)', marginBottom: 12 }}>Shipping calculated at checkout</div>
-              {user ? (
-                <button className="checkout-btn" onClick={() => { setCartOpen(false); navigate('/checkout'); }}>
-                  Checkout <ArrowRight size={14} />
-                </button>
-              ) : (
-                <button className="checkout-btn" onClick={() => { setCartOpen(false); navigate('/account'); }}>
-                  Sign In to Checkout <ArrowRight size={14} />
+              <button className="checkout-btn" onClick={() => { setCartOpen(false); navigate('/checkout'); }}>
+                Checkout <ArrowRight size={14} />
+              </button>
+              {!user && (
+                <button
+                  className="cart-signin-link"
+                  onClick={() => { setCartOpen(false); navigate('/account'); }}
+                >
+                  Have an account? Sign in
                 </button>
               )}
             </div>
@@ -1189,7 +1181,7 @@ const POLICY_PAGES = {
     title: 'Shipping',
     body: [
       'Every Shift piece is made to order. Production takes 2–7 business days, and delivery adds another 3–10 business days depending on the item and where you are.',
-      'Shipping is calculated at checkout, per package. Pieces ship straight from the production line that makes them, so an order can arrive in more than one package — each with its own tracking. Once your order ships, tracking appears automatically in your account under My Orders — no need to email us; the tracking link updates in real time from our production partners.',
+      'Shipping is calculated at checkout, per package. Pieces ship straight from the production line that makes them, so an order can arrive in more than one package — each with its own tracking. Once your order ships we email you the tracking automatically — no account needed and no need to email us; the tracking link updates in real time from our production partners. If you set a password on your account, the same tracking also appears under My Orders.',
       'We currently ship within the United States.',
     ],
   },
@@ -1241,6 +1233,7 @@ function PolicyPage() {
 function CheckoutPage() {
   const { cart, updateQty, cartTotal, checkout, checkingOut, checkoutError } = useCart();
   const { products } = useProducts();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [selectedSuggestion, setSelectedSuggestion] = useState(null);
 
@@ -1351,6 +1344,21 @@ function CheckoutPage() {
                 <span>{shipKnown ? 'Total' : 'Estimated Total'}</span>
                 <span>${(cartTotal + (shipKnown ? shippingTotal : 0)).toFixed(2)}</span>
               </div>
+              {/* No account required — Stripe collects the email at payment and
+                  the webhook records the order against it either way. */}
+              <div className="ck-guest">
+                {user ? (
+                  <>Ordering as <strong>{user.email}</strong></>
+                ) : (
+                  <>
+                    Guest checkout — no account needed. Your receipt and tracking go to the
+                    email you enter at payment.
+                    <button type="button" className="ck-guest-link" onClick={() => navigate('/account')}>
+                      Have an account? Sign in
+                    </button>
+                  </>
+                )}
+              </div>
               {checkoutError && <div className="ck-error">{checkoutError}</div>}
               <button className="ck-pay-btn" onClick={checkout} disabled={checkingOut}>
                 {checkingOut ? <><Loader size={14} className="spin" /> Processing...</> : <>Pay Now <ArrowRight size={14} /></>}
@@ -1410,6 +1418,14 @@ function OrderSuccessPage() {
           <Link to="/shop" className="hero-cta" style={{ display: 'inline-flex' }}>
             Continue Shopping <ArrowRight size={14} />
           </Link>
+          {/* Guest orders still get an account behind the scenes — this is how
+              the buyer claims it and sees their order history. */}
+          <p style={{ fontSize: 13, color: 'var(--gray)', marginTop: 28 }}>
+            Want to track it here?{' '}
+            <Link to="/account?claim=1" style={{ color: 'var(--white)', textDecoration: 'underline' }}>
+              Set a password for your order history
+            </Link>
+          </p>
         </motion.div>
       </div>
     </>
@@ -3513,7 +3529,10 @@ function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh, 
 
 function AccountPage() {
   const { user, loading, signOut } = useAuth();
-  const [authMode, setAuthMode] = useState('login');
+  const [accountParams] = useSearchParams();
+  // Guest buyers arrive from /order-success with ?claim=1 — their auth account
+  // already exists (the webhook creates it), so the way in is the reset link.
+  const [authMode, setAuthMode] = useState(() => accountParams.get('claim') ? 'reset' : 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -3615,8 +3634,11 @@ function AccountPage() {
             <img src="/shift-logo.png" alt="Shift" style={{ height: 36, filter: 'brightness(0) invert(1)', marginBottom: 24 }} />
             <h2 style={{ fontSize: 20, fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>My Account</h2>
             <p style={{ fontSize: 13, color: 'var(--gray)', marginBottom: 24 }}>
-              {authMode === 'reset' ? "We'll email you a link to reset your password"
-                : cart.length > 0 ? 'Sign in to continue to checkout' : 'Track your orders and manage your account'}
+              {authMode === 'reset' ? (accountParams.get('claim')
+                ? 'Enter the email you ordered with — we\'ll send a link to set your password and unlock your order history'
+                : "We'll email you a link to reset your password")
+                : cart.length > 0 ? 'Sign in for a faster checkout — or keep going as a guest'
+                  : 'Track your orders and manage your account'}
             </p>
 
             {authMode !== 'reset' && (
@@ -3649,6 +3671,12 @@ function AccountPage() {
 
             {error && <div style={{ color: '#e53e3e', fontSize: 13, marginTop: 12 }}>{error}</div>}
             {message && <div style={{ color: '#38a169', fontSize: 13, marginTop: 12 }}>{message}</div>}
+
+            {cart.length > 0 && authMode !== 'reset' && (
+              <button type="button" className="portal-guest" onClick={() => navigate('/checkout')}>
+                Continue as guest <ArrowRight size={13} />
+              </button>
+            )}
           </div>
         </div>
       </>
@@ -3805,7 +3833,7 @@ export default function App() {
               <Route path="/collections" element={<CollectionsPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/info/:slug" element={<PolicyPage />} />
-              <Route path="/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
+              <Route path="/checkout" element={<CheckoutPage />} />
               <Route path="/order-success" element={<OrderSuccessPage />} />
               <Route path="/account" element={<AccountPage />} />
             </Routes>
