@@ -218,10 +218,28 @@ export default async function handler(req, res) {
       return res.status(200).json({ received: true, duplicate: true })
     }
 
+    // Cart payload, chunked across ij0..ijN by create-checkout (Stripe caps a
+    // metadata value at 500 chars). Falls back to the legacy single itemsJson
+    // key for sessions created before that change. A failure here blanks every
+    // product_id, so it is recorded and stamped on the order rather than
+    // swallowed — the old bare `catch {}` is what made #7660fa48 fail silently.
     let orderItems = []
+    let itemsParseError = ''
     try {
-      orderItems = JSON.parse(session.metadata?.itemsJson || '[]')
-    } catch {}
+      const chunkCount = parseInt(session.metadata?.ijn || '0', 10)
+      let raw = ''
+      if (chunkCount > 0) {
+        for (let i = 0; i < chunkCount; i++) raw += session.metadata?.[`ij${i}`] ?? ''
+      } else {
+        raw = session.metadata?.itemsJson || '[]'
+      }
+      orderItems = JSON.parse(raw)
+      if (!Array.isArray(orderItems)) throw new Error('cart payload was not an array')
+    } catch (err) {
+      orderItems = []
+      itemsParseError = err.message
+      console.error('Cart metadata parse FAILED — product ids will be blank:', err.message)
+    }
 
     // Get line items from Stripe for full details
     const lineItems = await stripe.checkout.sessions.listLineItems(session.id)
@@ -308,6 +326,15 @@ export default async function handler(req, res) {
     }
 
     console.log('Order created:', order.id, 'for', customerEmail)
+
+    // A cart that failed to parse leaves every row without a product id, so
+    // fulfillment routing and cost snapshots both silently no-op. Make it loud.
+    if (itemsParseError) {
+      await stampFulfillmentError(
+        order.id,
+        `Cart data did not survive Stripe: ${itemsParseError}. Product ids, colors and sizes are BLANK on this order, so no supplier could be routed and no costs were snapshotted. Use "Repair items from Stripe" on this order, then send it to the supplier.`
+      )
+    }
 
     // ─── Order confirmation email ───────────────────────────────────────
     // Sent as soon as the order is recorded — before the fulfillment legs,
@@ -432,6 +459,22 @@ export default async function handler(req, res) {
     // fetched for the cost snapshot). Best-effort like the others: no-ops
     // until FE_API_KEY is set, never blocks the 200.
     try {
+      // Both of these used to fail as a plain false `if`, submitting nothing
+      // and stamping nothing: an empty catalog (feed fetch hiccup at webhook
+      // time) makes every FE item unrecognizable, and a missing key disables
+      // the leg outright. Neither can be silent now.
+      if (!snap.feIds || snap.feIds.size === 0) {
+        await stampFulfillmentError(
+          order.id,
+          'Fulfill Engine catalog came back EMPTY when this order was placed, so no item could be matched to FE and nothing was submitted. If this order has FE items, use "Send to Fulfill Engine".'
+        )
+      } else if (!feEnabled() && items.some(it => snap.feIds.has(it.productId))) {
+        await stampFulfillmentError(
+          order.id,
+          'This order has Fulfill Engine items but FE_API_KEY is not set, so nothing was submitted. Set the key in Vercel, then use "Send to Fulfill Engine".'
+        )
+      }
+
       const feItems = items.filter(it => snap.feIds?.has(it.productId))
       if (feItems.length && feEnabled()) {
         // Blank-level stock check BEFORE submitting: FE accepts orders for

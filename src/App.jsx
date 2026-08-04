@@ -3315,6 +3315,43 @@ function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh, 
     setBusy(false);
   };
 
+  // Rebuild blank item rows from the Stripe session. Orders placed before the
+  // cart payload was chunked could overflow Stripe's metadata limit and land
+  // with no product id, color or size — which stops supplier routing dead.
+  // Previews first, then applies on confirm.
+  const repairItems = async () => {
+    setBusy(true); setFulfillMsg('Reading the Stripe session…');
+    try {
+      const call = (apply) => fetch('/api/admin/repair-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+        body: JSON.stringify({ orderId: order.id, apply }),
+      }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Repair failed'); return d; });
+
+      const preview = await call(false);
+      if (!preview.wouldUpdate) {
+        setFulfillMsg('Nothing to repair — these items already have their product details.');
+        setBusy(false);
+        return;
+      }
+      const lines = preview.items
+        .filter(i => i.fields.length)
+        .map(i => `• ${i.name}${i.color || i.size ? ` — ${[i.color, i.size].filter(Boolean).join(' / ')}` : ''}${i.matched ? '' : '  (no product match)'}`)
+        .join('\n');
+      if (!window.confirm(`Restore details on ${preview.wouldUpdate} item(s) from Stripe?\n\n${lines}\n\nOnly empty fields are filled in.`)) {
+        setFulfillMsg('');
+        setBusy(false);
+        return;
+      }
+      const done = await call(true);
+      setFulfillMsg(done.message + (done.failures?.length ? ` Problems: ${done.failures.join('; ')}` : ''));
+      onRefresh?.();
+    } catch (err) {
+      setFulfillMsg(err.message);
+    }
+    setBusy(false);
+  };
+
   // Dry-run validate against Fulfill Engine, then really submit.
   const sendToFE = async () => {
     setBusy(true); setFulfillMsg('Validating with Fulfill Engine…');
@@ -3415,6 +3452,18 @@ function AdminOrderDetail({ order, onUpdate, onClose, adminPassword, onRefresh, 
             <div className="admin-fulfill-error-title">⚠ Fulfillment issue</div>
             {order.fulfillment_error}
             <div className="admin-fulfill-error-hint">A successful Send to Fulfill Engine / Send to Shopify / Send to Printify clears this banner.</div>
+          </div>
+        )}
+        {role === 'owner' && (order.items || []).some(it => !it.product_id) && (
+          <div className="admin-fulfill-error" style={{ marginBottom: 10 }}>
+            <div className="admin-fulfill-error-title">⚠ Item details missing</div>
+            {(order.items || []).filter(it => !it.product_id).length} item(s) on this order have no product
+            attached, so no supplier can be routed. Repair them from Stripe first, then send the order.
+            <div style={{ marginTop: 8 }}>
+              <button className="admin-action-btn" onClick={repairItems} disabled={busy}>
+                Repair items from Stripe
+              </button>
+            </div>
           </div>
         )}
         {order.fe_order_id ? (

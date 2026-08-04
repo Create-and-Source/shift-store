@@ -160,6 +160,35 @@ export default async function handler(req, res) {
       chunks.forEach((c, idx) => { shopifyMeta[`sf${idx}`] = c })
     }
 
+    // The cart itself. Everything downstream keys off these product ids —
+    // the Supabase order_items rows, Fulfill Engine routing, and the
+    // purchase-time cost snapshot — so the payload must arrive intact.
+    // Stripe caps a metadata VALUE at 500 chars and a 5-item cart already
+    // serializes to ~507, so this is chunked across ij0..ijN (ijn = chunk
+    // count), the same way the pf/sf routing above is. It was previously
+    // .substring(0, 500)'d into a single key, which silently truncated
+    // mid-JSON; the webhook's parse then threw into a bare catch and every
+    // item was written with a blank product_id, color and size (that is what
+    // happened to order #7660fa48 on 2026-07-28 — its FE items were never
+    // submitted and their costs never snapshotted).
+    const itemsStr = JSON.stringify(
+      items.map(i => ({
+        id: i.productId,
+        q: i.qty,
+        c: i.color,
+        s: i.size,
+        n: i.name,
+      }))
+    )
+    const itemsMeta = {}
+    const itemChunks = []
+    for (let i = 0; i < itemsStr.length; i += 480) itemChunks.push(itemsStr.slice(i, i + 480))
+    itemsMeta.ijn = String(itemChunks.length)
+    itemChunks.forEach((c, idx) => { itemsMeta[`ij${idx}`] = c })
+    // Also written unchunked when it fits, so a webhook running the previous
+    // build (deploy race) still reads a complete cart.
+    if (itemsStr.length <= 500) itemsMeta.itemsJson = itemsStr
+
     const sessionParams = {
       mode: 'payment',
       payment_method_types: ['card'],
@@ -171,15 +200,7 @@ export default async function handler(req, res) {
       cancel_url: `${origin}/checkout`,
       metadata: {
         store: 'shift',
-        itemsJson: JSON.stringify(
-          items.map(i => ({
-            id: i.productId,
-            q: i.qty,
-            c: i.color,
-            s: i.size,
-            n: i.name,
-          }))
-        ).substring(0, 500),
+        ...itemsMeta,
         ...printifyMeta,
         ...shopifyMeta,
       },
