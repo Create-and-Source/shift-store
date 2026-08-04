@@ -631,10 +631,10 @@ function HomePage() {
         </p>
       </motion.section>
 
-      {/* SPREAD — Essentials */}
+      {/* SPREAD — Summer Collection */}
       <section className="spread">
         <div className="spread-img glitch-img-wrap">
-          <img src="/lifestyle/creator.jpg" alt="Meet the creator — SHIFT" loading="lazy" style={{ objectPosition: 'center 30%' }} />
+          <img src="/lifestyle/summer-collection.jpg" alt="SHIFT Summer Collection — on the boardwalk" loading="lazy" style={{ objectPosition: 'center 30%' }} />
         </div>
         <motion.div
           className="spread-text"
@@ -643,12 +643,12 @@ function HomePage() {
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
         >
-          <h2 className="spread-title"><GlitchText>Meet the Creator</GlitchText></h2>
+          <h2 className="spread-title"><GlitchText>Summer Collection</GlitchText></h2>
           <p className="spread-body">
-            The heart of this brand is the belief that life's unexpected turns are opportunities to shift, adapt, and move forward. SHIFT was inspired by my own challenges and pivot points in life — knowing growth comes from change. We're here to encourage you to move with purpose, embrace new paths, and ALWAYS keep moving forward. Life keeps moving, so should you.
+            Long days, salt air, and nowhere in particular to be. The Summer Collection is cut for the season that never sits still — coastal graphics, washed crewnecks, and easy layers that carry from a boardwalk morning straight through to sunset. Life keeps moving, so should you.
           </p>
-          <Link to="/about" className="spread-link">
-            View the Mission <ArrowRight size={14} />
+          <Link to="/shop?category=Summer%20Collection" className="spread-link">
+            Shop the Collection <ArrowRight size={14} />
           </Link>
         </motion.div>
       </section>
