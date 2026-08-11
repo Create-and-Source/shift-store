@@ -10,6 +10,7 @@ import { shopifyAdminEnabled, createShopifyOrder } from './_lib/shopify.js'
 import { getOwnerPrices } from './_lib/adminRole.js'
 import { feEnabled, createFEOrder, feAvailability, comboKey } from './_lib/fulfillengine.js'
 import { emailEnabled, sendEmail, orderConfirmationHtml } from './_lib/email.js'
+import { computeCartShipping } from './_lib/shipping.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
@@ -432,12 +433,33 @@ export default async function handler(req, res) {
       }
 
       if (shopifyRoute.length && shopifyAdminEnabled()) {
-        const lineItems = shopifyRoute.map(r => ({ variantId: r.v, quantity: r.q }))
+        // Price the Shopify order at what the customer paid us, taken from the
+        // Stripe line items (`items[].price`) via the cart index the route
+        // carries. Legacy sessions have no `x` and fall back to Shopify's own
+        // listing price — which is our supplier cost, so the customer must
+        // never see that order (see ORDER_EMAIL in _lib/shopify.js).
+        const lineItems = shopifyRoute.map(r => ({
+          variantId: r.v,
+          quantity: r.q,
+          price: typeof r.x === 'number' ? items[r.x]?.price : undefined,
+        }))
+
+        // What the customer paid for this supplier's parcel, so the Shopify
+        // order doesn't read "Free" against a real shipping charge.
+        let shopifyShipping = 0
+        try {
+          const quote = await computeCartShipping(
+            shopifyRoute.map(r => ({ source: 'shopify', qty: r.q }))
+          )
+          shopifyShipping = quote.total
+        } catch (qErr) {
+          console.error('Shopify leg shipping quote failed (non-fatal):', qErr.message)
+        }
 
         const shOrder = await createShopifyOrder({
-          email: customerEmail,
           lineItems,
           shippingAddress,
+          shippingPrice: shopifyShipping,
         })
 
         console.log('Shopify order created:', shOrder?.id, shOrder?.name, 'for order', order.id)

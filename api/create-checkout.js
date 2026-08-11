@@ -147,9 +147,15 @@ export default async function handler(req, res) {
     // Shopify fulfillment routing — the webhook creates a paid order in the
     // Shopify admin for these items. `printifyVariantId` carries the source's
     // variant id generically (a Shopify variant gid for Shopify items).
+    // `x` is the item's index in the cart, which is also its index in the
+    // Stripe line items — the webhook uses it to price the Shopify order at
+    // what the customer ACTUALLY PAID (read back off Stripe, never trusted
+    // from the client). Without it Shopify prices the order off its own
+    // listings, which on this store are the raw supplier costs.
     const shopifyRoute = items
-      .filter(i => i.source === 'shopify' && i.printifyVariantId)
-      .map(i => ({ v: i.printifyVariantId, q: i.qty }))
+      .map((i, idx) => ({ i, idx }))
+      .filter(({ i }) => i.source === 'shopify' && i.printifyVariantId)
+      .map(({ i, idx }) => ({ v: i.printifyVariantId, q: i.qty, x: idx }))
 
     const shopifyMeta = {}
     if (shopifyRoute.length) {

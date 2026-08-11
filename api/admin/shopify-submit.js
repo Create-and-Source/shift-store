@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { roleFromReq } from '../_lib/adminRole.js'
 import { shopifyAdminEnabled, createShopifyOrder } from '../_lib/shopify.js'
+import { computeCartShipping } from '../_lib/shipping.js'
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
@@ -49,17 +50,32 @@ export default async function handler(req, res) {
     const p = byId.get(it.product_id)
     if (!p) continue // not a Shopify product
     const variantId = p.variantMap?.[`${it.color}|${it.size}`]
-    if (variantId) lineItems.push({ variantId, quantity: it.quantity || 1 })
+    // unit_price = what the customer paid. Without it Shopify prices the order
+    // off its listings, which on this store are the supplier costs.
+    if (variantId) lineItems.push({ variantId, quantity: it.quantity || 1, price: Number(it.unit_price) || 0 })
     else misses.push(`${it.product_name} ${it.color}/${it.size}`)
   }
   if (misses.length) return res.status(400).json({ error: `No Shopify variant match for: ${misses.join(', ')}` })
   if (!lineItems.length) return res.status(400).json({ error: 'No Shopify items on this order' })
 
+  // The customer's email is deliberately NOT passed — see ORDER_EMAIL in
+  // _lib/shopify.js: a buyer's address on a Shopify order mails them a second
+  // confirmation and surfaces it in their Shop app at our wholesale cost.
+  let shopifyShipping = 0
+  try {
+    const quote = await computeCartShipping(
+      lineItems.map(li => ({ source: 'shopify', qty: li.quantity }))
+    )
+    shopifyShipping = quote.total
+  } catch (qErr) {
+    console.error('Shopify leg shipping quote failed (non-fatal):', qErr.message)
+  }
+
   try {
     const shOrder = await createShopifyOrder({
-      email: order.customer?.email || '',
       lineItems,
       shippingAddress: addr,
+      shippingPrice: shopifyShipping,
     })
 
     if (shOrder?.id) {

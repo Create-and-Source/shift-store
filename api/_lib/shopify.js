@@ -274,22 +274,66 @@ mutation draftOrderComplete($id: ID!) {
   }
 }`
 
+// The BUYER'S email must never land on a Shopify order. Shopify mails its own
+// order confirmation to whatever address the order carries, and the Shop app
+// aggregates orders by email — so the buyer gets a SECOND, contradictory order
+// in their inbox and Shop account, priced at our WHOLESALE COST (this store's
+// listing prices ARE the Tapstitch production costs; they were halved to match
+// on 2026-07-15). That is what happened on 2026-08-03: Shopify order #1014 /
+// draft #D12 showed the customer $37.94 + $9.98 and free shipping against the
+// $53.99 + $23.99 + $9.00 she actually paid SHIFT. Every Shopify order books
+// against one house address instead — Tapstitch only needs the items and the
+// shipping address, and SHIFT sends its own confirmation/tracking email.
+const ORDER_EMAIL = process.env.SHOPIFY_ORDER_EMAIL || 'orders@shiftapparelco.com'
+
 // Create a PAID order in the Shopify admin so it can be fulfilled there.
-// lineItems: [{ variantId (gid://shopify/ProductVariant/...), quantity }]
-export async function createShopifyOrder({ email, lineItems, shippingAddress }) {
+// lineItems: [{ variantId (gid://shopify/ProductVariant/...), quantity, price }]
+// `price` is the RETAIL unit price the customer actually paid; without it the
+// order prices itself off the listing (= our cost). shippingPrice is what the
+// customer paid for this supplier's leg.
+export async function createShopifyOrder({ lineItems, shippingAddress, shippingPrice = 0 }) {
   // Draft order → complete: the SAME path as the admin "Create order" button,
   // so the resulting order carries Shopify's native channel stamp. Tapstitch
   // only imports orders from native channels — direct orderCreate orders
   // (custom-app channel) are silently ignored by it. Requires the
   // write_draft_orders scope on the SHIFT Order Sync app.
-  const input = {
-    lineItems: lineItems.map(li => ({ variantId: li.variantId, quantity: li.quantity })),
-    shippingLine: { title: 'Standard Shipping', price: '0.00' },
-  }
-  if (email) input.email = email
-  if (shippingAddress) input.shippingAddress = toShopifyAddress(shippingAddress)
+  const anyPriced = lineItems.some(li => Number(li.price) > 0)
 
-  const created = await adminGql(DRAFT_ORDER_CREATE, { input })
+  const buildInput = priceField => {
+    const input = {
+      lineItems: lineItems.map(li => {
+        const item = { variantId: li.variantId, quantity: li.quantity }
+        const amount = Number(li.price)
+        if (isFinite(amount) && amount > 0) {
+          item[priceField] = priceField === 'priceOverride'
+            ? { amount: amount.toFixed(2), currencyCode: 'USD' }
+            : amount.toFixed(2)
+        }
+        return item
+      }),
+      shippingLine: {
+        title: 'Standard Shipping',
+        price: (Number(shippingPrice) || 0).toFixed(2),
+      },
+      email: ORDER_EMAIL,
+    }
+    if (shippingAddress) input.shippingAddress = toShopifyAddress(shippingAddress)
+    return input
+  }
+
+  let created
+  try {
+    created = await adminGql(DRAFT_ORDER_CREATE, { input: buildInput('priceOverride') })
+  } catch (err) {
+    // priceOverride superseded originalUnitPrice on DraftOrderLineItemInput.
+    // If this API version rejects the field, retry with the old one rather
+    // than lose the order — fulfillment matters more than the display price.
+    const schemaMiss = /priceOverride|originalUnitPrice|doesn't exist|not defined|InvalidValue/i
+      .test(err.message || '')
+    if (!anyPriced || !schemaMiss) throw err
+    console.warn('Shopify priceOverride rejected, retrying with originalUnitPrice:', err.message)
+    created = await adminGql(DRAFT_ORDER_CREATE, { input: buildInput('originalUnitPrice') })
+  }
   const createErrors = created?.draftOrderCreate?.userErrors || []
   if (createErrors.length) {
     const err = new Error('Shopify draftOrderCreate: ' + createErrors.map(e => e.message).join('; '))
