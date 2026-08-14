@@ -121,6 +121,38 @@ part of* — the OG Collection, the Summer Collection — and can pull products 
 - ⚠️ `/collection` (singular) and `/collections` (plural) are one character apart and go to different
   pages. Deliberate — `/collection` is what was asked for — but worth renaming if it ever confuses.
 
+**Live state 2026-08-14**: migration APPLIED, both collections seeded with their photos and visible,
+**0 products assigned** (Tovah is assigning them — "dont add anythign to the collections, I will do
+that"). Verified live: public GET returns both, POST 401s unauthenticated and with a wrong key, both
+photos load, all three routes serve.
+
+⚠️ **"OG" is a display RENAME across most of the catalog** — Market Bag → "OG Market Bag", the AS Colour
+tee → "OG Heavy Tee", the yoga leggings and sports bra too. Matching a collection by product name would
+sweep in ~18 unrelated products, which is exactly why membership is explicit ticks only. Don't
+"helpfully" add a name-matching fallback.
+
+⚠️ **Two different products both display as "OG Heavy Tee"** (the real OG Heavy T and the renamed
+AS Colour Mens Heavy Tee) — they read as duplicates anywhere they appear together.
+
+## ⚠️ Newsletter capture — zero signups ever (found 2026-08-13)
+
+Measured directly in the database: **`subscribers` = 0 rows · `customers` = 25 (all 25 with an email)
+· `orders` = 26.**
+
+- **Buyer emails have always been saved.** The webhook writes `customers` from
+  `session.customer_details.email` on every order — that is what confirmation and tracking mail uses.
+- **The newsletter list is empty, and the endpoint is fine.** Proven live: `POST /api/subscribe` →
+  `200 {"ok":true}` → row appeared → deleted again (back to 0).
+- **Root cause of at least some loss: there were TWO copies of the "Join the Movement" form and only
+  one was wired.** The copy on the Collections/Categories page was `onSubmit={e => e.preventDefault()}`
+  and nothing else — no request, no error, no saved row, so anyone who used it was silently dropped.
+  Fixed 2026-08-13 (swapped in `<NewsletterForm />`; the `/collection` page uses the real one too).
+  The homepage copy has been correct since 07-15, so its zero is genuine.
+- ⚠️ **Reusable**: grep every usage of a form component before trusting that "the form works" — a
+  shared-looking component had a hand-rolled dead twin.
+- Possible follow-up (not built, Tovah's call): a buyer-email export on the admin Subscribers page, so
+  the 25 real customer addresses are reachable there instead of only per-order.
+
 ### The collections feature (`/collection`)
 
 **Not in the header** — the route is live but unlinked, pending sign-off. Everything about a
@@ -191,3 +223,11 @@ Three organic orders within ~40 min: Michael Sperando $41.99 (#0e39c000), Genaro
 3b. **Fulfill Engine auto-fulfillment WORKING — first real FE order submitted 2026-07-20** ("Sent to Fulfill Engine ✓ … will produce and ship"). The store's FE items are **print-on-demand**, and the ONLY order shape FE accepts for them (learned through three validation errors + the FE-debug probe): item = **`catalogProductId` (the blank, e.g. CT103938) + `designId` (the stored design, e.g. d-72452524) + `productColor`/`productSize`** ('One Size' → omit size) + quantity + declaredValue; **NO order-level campaignId** (account-level POD), **NO sku** (campaign variant SKUs price/display only — FE campaign inventory returns empty for them → InvalidSKU if ordered). Both ids resolve at submit time from the authenticated campaign catalog. Webhook auto-submits future FE orders with this same code; admin has validate-then-submit "Send to Fulfill Engine" + an **FE debug** button (campaign catalog + SKU-validity + prices dump). ~~Still pending: `supabase-fe-order-id.sql`~~ — column added 2026-07-20; the admin can now store/display FE order ids on new submissions.
 4. ~~Snapshot cost/owner-price onto `order_items` at purchase~~ — DONE 2026-07-20 (+ date-range profit CSV).
 5. Optional hardening: pin `PRINTIFY_SHOP_ID=26536230`; Shopify auto-"delivered" needs a fulfillment read scope on the "SHIFT Order Sync" app.
+6. **Collections (2026-08-14)** — ~~migration~~ DONE, ~~backend + admin + page~~ SHIPPED. Left for Tovah:
+   (a) **assign products** to each collection in /dashadmin → Collections (both are empty, so `/collection`
+   shows only empty states); (b) **decide whether `/collection` goes in the header** — the route is live but
+   deliberately unlinked pending her approval; (c) retire the "Summer Collection" **category** once the
+   collection version is populated; (d) the duplicate "OG Heavy Tee" display name.
+7. **Newsletter (2026-08-13)** — the dead second form is fixed, but the list is still empty. Worth deciding
+   whether the "Join the Movement" copy/placement is doing anything at all, and whether to surface the
+   25 real buyer emails in the admin (see the newsletter section above).
