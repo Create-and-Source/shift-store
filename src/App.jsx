@@ -284,7 +284,7 @@ function Header() {
           </Link>
           <nav className="header-nav">
             <Link to="/shop">Shop</Link>
-            <Link to="/collections">Collections</Link>
+            <Link to="/categories">Categories</Link>
             <Link to="/about">About</Link>
             <Link to="/account">Account</Link>
           </nav>
@@ -306,7 +306,7 @@ function Header() {
         </button>
         <Link to="/" onClick={() => setMobileOpen(false)}>Home</Link>
         <Link to="/shop" onClick={() => setMobileOpen(false)}>Shop</Link>
-        <Link to="/collections" onClick={() => setMobileOpen(false)}>Collections</Link>
+        <Link to="/categories" onClick={() => setMobileOpen(false)}>Categories</Link>
         <Link to="/about" onClick={() => setMobileOpen(false)}>About</Link>
         <Link to="/account" onClick={() => setMobileOpen(false)}>Account</Link>
       </div>
@@ -398,7 +398,7 @@ function Footer() {
         <div className="footer-col">
           <h4>Company</h4>
           <Link to="/about">About</Link>
-          <Link to="/collections">Collections</Link>
+          <Link to="/categories">Categories</Link>
         </div>
         <div className="footer-col">
           <h4>Info</h4>
@@ -1050,7 +1050,10 @@ function ProductPage() {
   );
 }
 
-function CollectionsPage() {
+// The category board (Hats, T Shirts, Pants…). Was labelled "Collections" on the
+// storefront while the admin called the same thing categories — the two words now
+// agree. Real curated collections (OG, Summer) live on CollectionsPage at /collection.
+function CategoriesPage() {
   const { products, customCategories } = useProducts();
   const rots = [-3, 2.5, -1.5, 4, -2, 3, -2.5, 1.5, -3.5, 2];
 
@@ -1084,7 +1087,7 @@ function CollectionsPage() {
       <div className="scanlines" />
       <div className="shop-header">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-          <h1 className="shop-title"><GlitchText>Collections</GlitchText></h1>
+          <h1 className="shop-title"><GlitchText>Categories</GlitchText></h1>
           <p style={{ fontSize: 15, color: 'var(--gray)', marginTop: 12 }}>Shop by category. Each one tells a story.</p>
         </motion.div>
       </div>
@@ -1121,10 +1124,157 @@ function CollectionsPage() {
         <div className="newsletter-label">Be First</div>
         <h3 className="newsletter-title"><GlitchText>Get Notified</GlitchText></h3>
         <p className="newsletter-sub">Be the first to know when new collections drop.</p>
-        <form className="newsletter-form" onSubmit={e => e.preventDefault()}>
-          <input type="email" placeholder="Your email" />
-          <button type="submit">Notify Me</button>
-        </form>
+        <NewsletterForm />
+      </section>
+    </>
+  );
+}
+
+// ═══ COLLECTIONS (/collection) ═══
+// Curated drops that cut ACROSS categories: an OG hoodie sits in Hoodies and an OG
+// tee in T Shirts, but both can belong to the OG Collection. Everything here — the
+// photo, the copy, which products are in it, whether it's visible, and any countdown
+// — is managed in /dashadmin → Collections. Hidden collections are filtered out
+// server-side, so the payload never carries one.
+
+// Ticks once a second while a timer is live. Returns null when there's no timer or
+// it has already run out, which is what keeps an expired clock off the page.
+function useCountdown(endsAt) {
+  const target = endsAt ? new Date(endsAt).getTime() : 0;
+  // Tick a clock rather than the remaining time: the effect only ever sets state
+  // from inside the interval callback, and `left` stays a pure render-time subtraction.
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!target) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [target]);
+
+  const left = target - now;
+  if (!target || isNaN(target) || left <= 0) return null;
+  const s = Math.floor(left / 1000);
+  return {
+    Days: Math.floor(s / 86400),
+    Hrs: Math.floor((s % 86400) / 3600),
+    Min: Math.floor((s % 3600) / 60),
+    Sec: s % 60,
+  };
+}
+
+function CollectionCountdown({ endsAt, label }) {
+  const t = useCountdown(endsAt);
+  if (!t) return null;
+  return (
+    <div className="countdown">
+      <div className="countdown-label">{label || 'Ends in'}</div>
+      <div className="countdown-units">
+        {Object.entries(t).map(([k, v]) => (
+          <div className="countdown-unit" key={k}>
+            <span className="countdown-num">{String(v).padStart(2, '0')}</span>
+            <span className="countdown-key">{k}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CollectionsPage() {
+  const { products, loading } = useProducts();
+  const [collections, setCollections] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [loadingCols, setLoadingCols] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/admin/collections')
+      .then(r => r.json())
+      .then(d => {
+        setCollections(d.collections || []);
+        setAssignments(d.assignments || []);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingCols(false));
+  }, []);
+
+  const productById = new Map(products.map(p => [p.id, p]));
+  const itemsFor = id => assignments
+    .filter(a => a.collection_id === id)
+    .map(a => productById.get(a.product_id))
+    // A product that's hidden or gone from the feed drops out here rather than
+    // rendering a broken card — hiding a product hides it everywhere at once.
+    .filter(Boolean);
+
+  const busy = loading || loadingCols;
+
+  return (
+    <>
+      <div className="scanlines" />
+      <div className="shop-header">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+          <h1 className="shop-title"><GlitchText>Collections</GlitchText></h1>
+          <p style={{ fontSize: 15, color: 'var(--gray)', marginTop: 12 }}>
+            Curated drops. Each one pulls from across the store.
+          </p>
+        </motion.div>
+      </div>
+
+      {busy ? (
+        <div style={{ textAlign: 'center', padding: '100px 0', color: 'var(--gray)' }}>
+          <Loader size={24} className="spin" />
+          <p style={{ marginTop: 16 }}>Loading collections...</p>
+        </div>
+      ) : collections.length === 0 ? (
+        <div className="collection-empty">No collections are running right now. Check back soon.</div>
+      ) : (
+        collections.map(c => {
+          const items = itemsFor(c.id);
+          return (
+            <section className="collection" id={c.slug} key={c.id}>
+              <div className="spread">
+                <div className="spread-img glitch-img-wrap">
+                  {c.image_url
+                    ? <img src={c.image_url} alt={`SHIFT ${c.name}`} loading="lazy" />
+                    : <div className="collection-photo-empty"><span>{c.name}</span></div>}
+                </div>
+                <motion.div
+                  className="spread-text"
+                  initial={{ opacity: 0, x: 40 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.7 }}
+                >
+                  {c.label && <div className="spread-label">{c.label}</div>}
+                  <h2 className="spread-title"><GlitchText>{c.name}</GlitchText></h2>
+                  {c.blurb && <p className="spread-body">{c.blurb}</p>}
+                  <CollectionCountdown endsAt={c.countdown_ends_at} label={c.countdown_label} />
+                  {items.length > 0 && (
+                    <div className="collection-count">
+                      {items.length} {items.length === 1 ? 'piece' : 'pieces'}
+                    </div>
+                  )}
+                </motion.div>
+              </div>
+
+              {items.length > 0 ? (
+                <div className="shop-grid collection-grid">
+                  {items.map((p, i) => (
+                    <ProductCard key={p.id} product={p} index={i} />
+                  ))}
+                </div>
+              ) : (
+                <div className="collection-empty">Pieces for this collection are on the way.</div>
+              )}
+            </section>
+          );
+        })
+      )}
+
+      <section className="newsletter" style={{ marginTop: 40 }}>
+        <div className="newsletter-label">Be First</div>
+        <h3 className="newsletter-title"><GlitchText>Get Notified</GlitchText></h3>
+        <p className="newsletter-sub">Be the first to know when the next collection drops.</p>
+        <NewsletterForm />
       </section>
     </>
   );
@@ -2163,6 +2313,335 @@ function AdminProductsPage({ adminPassword, role }) {
   );
 }
 
+/* ═══ ADMIN COLLECTIONS — curated drops: photo, copy, products, hide, countdown ═══ */
+
+// <input type="datetime-local"> speaks local wall-clock; the column stores UTC.
+// Convert on both edges so a 6 PM timer means 6 PM where she is, not on Vercel.
+function toLocalInput(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function AdminCollectionsPage({ adminPassword }) {
+  const [collections, setCollections] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [feedProducts, setFeedProducts] = useState([]);
+  const [overrides, setOverrides] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
+  const [setupNeeded, setSetupNeeded] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [loadedAt, setLoadedAt] = useState(0);    // stamped per load; "is the timer still running?"
+  const [openPanel, setOpenPanel] = useState({}); // collectionId -> 'details' | 'products'
+  const [drafts, setDrafts] = useState({});       // collectionId -> edited fields
+  const [prodSearch, setProdSearch] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [colRes, contentRes, prodRes, pfRes, shRes] = await Promise.all([
+        fetch('/api/admin/collections', { headers: { 'x-admin-key': adminPassword } }),
+        fetch('/api/admin/content'),
+        fetch('/api/products'),
+        fetch('/api/printify/products').catch(() => null),
+        fetch('/api/shopify/products').catch(() => null),
+      ]);
+      const colData = await colRes.json();
+      const content = await contentRes.json();
+      const prodData = await prodRes.json();
+      const pfData = pfRes ? await pfRes.json().catch(() => ({ products: [] })) : { products: [] };
+      const shData = shRes ? await shRes.json().catch(() => ({ products: [] })) : { products: [] };
+      setCollections(colData.collections || []);
+      setAssignments(colData.assignments || []);
+      setSetupNeeded(!!colData.setupNeeded);
+      setOverrides(content.overrides || {});
+      setFeedProducts([...(prodData.products || []), ...(pfData.products || []), ...(shData.products || [])]);
+      setLoadedAt(Date.now());
+    } catch (e) { setStatusMsg(e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const post = async (body) => {
+    const res = await fetch('/api/admin/collections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+    return data;
+  };
+
+  const withBusy = async (label, fn) => {
+    setBusy(true); setStatusMsg(label);
+    try { await fn(); }
+    catch (e) { setStatusMsg(e.message); setBusy(false); return; }
+    setBusy(false);
+  };
+
+  const create = () => withBusy('Creating…', async () => {
+    const name = newName.trim();
+    if (!name) { setStatusMsg('Give the collection a name first.'); return; }
+    await post({ action: 'createCollection', name, sortOrder: collections.length });
+    setNewName('');
+    setStatusMsg('Collection created ✓');
+    await load();
+  });
+
+  const setPhoto = (id, file) => withBusy('Uploading photo…', async () => {
+    const url = await uploadImageFile(file, { folder: 'collections', name: 'collection', adminPassword });
+    await post({ action: 'setCollectionImage', collectionId: id, imageUrl: url });
+    setStatusMsg('Photo saved ✓');
+    await load();
+  });
+
+  const clearPhoto = (id) => withBusy('Removing…', async () => {
+    await post({ action: 'setCollectionImage', collectionId: id, imageUrl: null });
+    await load();
+  });
+
+  const toggleHidden = (c) => withBusy(c.hidden ? 'Showing…' : 'Hiding…', async () => {
+    await post({ action: 'setCollectionHidden', collectionId: c.id, hidden: !c.hidden });
+    setStatusMsg(c.hidden ? 'Collection is live on the website ✓' : 'Collection hidden from the website ✓');
+    await load();
+  });
+
+  const saveDetails = (c) => withBusy('Saving…', async () => {
+    const d = drafts[c.id] || {};
+    await post({
+      action: 'updateCollection',
+      collectionId: c.id,
+      name: d.name ?? c.name,
+      label: d.label ?? (c.label || ''),
+      blurb: d.blurb ?? (c.blurb || ''),
+    });
+    setStatusMsg('Saved ✓');
+    await load();
+  });
+
+  const startCountdown = (c) => withBusy('Starting timer…', async () => {
+    const d = drafts[c.id] || {};
+    const local = d.endsAt ?? toLocalInput(c.countdown_ends_at);
+    if (!local) { setStatusMsg('Pick a date and time first.'); return; }
+    const when = new Date(local);
+    if (isNaN(when.getTime())) { setStatusMsg('That date/time is not valid.'); return; }
+    if (when.getTime() <= Date.now()) { setStatusMsg('That time is in the past — the timer would not show.'); return; }
+    await post({
+      action: 'setCollectionCountdown',
+      collectionId: c.id,
+      endsAt: when.toISOString(),
+      label: d.cdLabel ?? (c.countdown_label || ''),
+    });
+    setStatusMsg('Countdown running ✓');
+    await load();
+  });
+
+  const stopCountdown = (c) => withBusy('Stopping timer…', async () => {
+    await post({ action: 'setCollectionCountdown', collectionId: c.id, endsAt: null });
+    setStatusMsg('Countdown stopped ✓');
+    await load();
+  });
+
+  const remove = (c) => {
+    if (!window.confirm(`Delete the collection “${c.name}”? The products themselves are not touched.`)) return;
+    withBusy('Deleting…', async () => {
+      await post({ action: 'deleteCollection', collectionId: c.id });
+      await load();
+    });
+  };
+
+  const toggleProduct = (c, productId, isIn) => withBusy(isIn ? 'Removing…' : 'Adding…', async () => {
+    await post({
+      action: isIn ? 'unassignProduct' : 'assignProduct',
+      collectionId: c.id,
+      productId,
+    });
+    await load();
+  });
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><Loader size={24} className="spin" /></div>;
+
+  const idsIn = c => new Set(assignments.filter(a => a.collection_id === c.id).map(a => a.product_id));
+  const shownName = p => overrides[p.id]?.name || p.name;
+  const filteredFeed = feedProducts.filter(p =>
+    !prodSearch || shownName(p).toLowerCase().includes(prodSearch.toLowerCase()));
+
+  return (
+    <div className="admin-media">
+      <div className="admin-media-body">
+        <p className="admin-media-hint">
+          Collections are curated drops that can pull products from <strong>any</strong> category —
+          an OG hoodie and an OG tee live in Hoodies and T Shirts, but both can sit in the OG Collection.
+          They show on <strong>shiftapparelco.com/collection</strong>.
+          {' '}<strong>Hide</strong> takes a collection off the website without deleting it, and a
+          <strong> countdown</strong> puts a live timer on its section.
+        </p>
+
+        {setupNeeded && (
+          <p className="admin-media-empty">
+            One-time setup needed: run <strong>supabase-collections.sql</strong> in Supabase before
+            collections can be saved.
+          </p>
+        )}
+
+        {statusMsg && <div className="admin-media-status">{busy && <Loader size={12} className="spin" />} {statusMsg}</div>}
+
+        <div className="admin-collection-new">
+          <input
+            placeholder="New collection name…"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && create()}
+          />
+          <button className="admin-upload-btn" disabled={busy} onClick={create}>Add collection</button>
+        </div>
+
+        {collections.length === 0 && !setupNeeded && (
+          <p className="admin-media-empty">No collections yet — add one above.</p>
+        )}
+
+        {collections.map(c => {
+          const inSet = idsIn(c);
+          const d = drafts[c.id] || {};
+          const setDraft = patch => setDrafts(prev => ({ ...prev, [c.id]: { ...prev[c.id], ...patch } }));
+          const panel = openPanel[c.id];
+          const timerLive = c.countdown_ends_at && new Date(c.countdown_ends_at).getTime() > loadedAt;
+
+          return (
+            <div key={c.id} className={`admin-collection-card ${c.hidden ? 'is-hidden' : ''}`}>
+              <div className="admin-collection-head">
+                <div className="admin-media-thumb sm" style={c.image_url ? { backgroundImage: `url(${c.image_url})` } : {}}>
+                  {!c.image_url && <span>No photo</span>}
+                </div>
+                <div className="admin-collection-title">
+                  <strong>{c.name}</strong>
+                  <div className="admin-src-tag">
+                    {inSet.size} {inSet.size === 1 ? 'piece' : 'pieces'}
+                    {c.hidden && <span className="tag-hidden"> · Hidden</span>}
+                    {timerLive && <span className="tag-timer"> · Timer ends {new Date(c.countdown_ends_at).toLocaleString()}</span>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="admin-collection-actions">
+                <label className="admin-upload-btn">
+                  {c.image_url ? 'Replace photo' : 'Upload photo'}
+                  <input type="file" accept="image/*" disabled={busy} onChange={e => e.target.files[0] && setPhoto(c.id, e.target.files[0])} />
+                </label>
+                {c.image_url && <button className="admin-link-btn" disabled={busy} onClick={() => clearPhoto(c.id)}>Remove photo</button>}
+                <button className="admin-cat-hide-btn" disabled={busy} onClick={() => toggleHidden(c)}>
+                  {c.hidden ? 'Show on website' : 'Hide from website'}
+                </button>
+                <button
+                  className="admin-cat-hide-btn"
+                  onClick={() => setOpenPanel(p => ({ ...p, [c.id]: panel === 'details' ? null : 'details' }))}
+                >
+                  Text &amp; timer
+                </button>
+                <button
+                  className="admin-cat-hide-btn"
+                  onClick={() => setOpenPanel(p => ({ ...p, [c.id]: panel === 'products' ? null : 'products' }))}
+                >
+                  Products ({inSet.size})
+                </button>
+                <button className="admin-link-btn danger" disabled={busy} onClick={() => remove(c)}>Delete</button>
+              </div>
+
+              {panel === 'details' && (
+                <div className="admin-collection-panel">
+                  <label>Name
+                    <input value={d.name ?? c.name} onChange={e => setDraft({ name: e.target.value })} />
+                  </label>
+                  <label>Small line above the title
+                    <input
+                      placeholder="e.g. Our Staples"
+                      value={d.label ?? (c.label || '')}
+                      onChange={e => setDraft({ label: e.target.value })}
+                    />
+                  </label>
+                  <label>Description
+                    <textarea
+                      rows={4}
+                      placeholder="What this collection is about…"
+                      value={d.blurb ?? (c.blurb || '')}
+                      onChange={e => setDraft({ blurb: e.target.value })}
+                    />
+                  </label>
+                  <button className="admin-desc-save" disabled={busy} onClick={() => saveDetails(c)}>Save text</button>
+
+                  <div className="admin-collection-timer">
+                    <strong>Countdown timer</strong>
+                    <p className="admin-media-hint">
+                      Set a date and time and the collection shows a live clock on the website.
+                      Leave it stopped and no timer appears. When it reaches zero the clock disappears
+                      on its own — the collection stays up.
+                    </p>
+                    <label>Counts down to
+                      <input
+                        type="datetime-local"
+                        value={d.endsAt ?? toLocalInput(c.countdown_ends_at)}
+                        onChange={e => setDraft({ endsAt: e.target.value })}
+                      />
+                    </label>
+                    <label>Timer wording
+                      <input
+                        placeholder="e.g. Drops in / Ends in"
+                        value={d.cdLabel ?? (c.countdown_label || '')}
+                        onChange={e => setDraft({ cdLabel: e.target.value })}
+                      />
+                    </label>
+                    <div className="admin-desc-actions">
+                      <button className="admin-desc-save" disabled={busy} onClick={() => startCountdown(c)}>
+                        {timerLive ? 'Update timer' : 'Start timer'}
+                      </button>
+                      {c.countdown_ends_at && (
+                        <button disabled={busy} onClick={() => stopCountdown(c)}>Stop timer</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {panel === 'products' && (
+                <div className="admin-collection-panel">
+                  <p className="admin-media-hint">Tick the products that belong in this collection. A product can be in more than one.</p>
+                  <input
+                    className="admin-media-search"
+                    placeholder="Search products…"
+                    value={prodSearch}
+                    onChange={e => setProdSearch(e.target.value)}
+                  />
+                  <div className="admin-collection-products">
+                    {filteredFeed.map(p => {
+                      const isIn = inSet.has(p.id);
+                      const img = overrides[p.id]?.image_urls?.[0] || p.image || p.colors?.[0]?.images?.[0]?.url;
+                      return (
+                        <label key={p.id} className={`admin-collection-product ${isIn ? 'is-in' : ''}`}>
+                          <input type="checkbox" checked={isIn} disabled={busy} onChange={() => toggleProduct(c, p.id, isIn)} />
+                          <div className="admin-media-thumb sm" style={img ? { backgroundImage: `url(${img})` } : {}}>{!img && <span>—</span>}</div>
+                          <div>
+                            <strong title={shownName(p)}>{shownName(p)}</strong>
+                            <div className="admin-src-tag">{p.source || 'fulfillengine'}</div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ═══ ADMIN MEDIA — uploads, category photos, custom products ═══ */
 
 // Resize/compress an image File to a data URL so uploads stay small + fast.
@@ -2436,6 +2915,7 @@ function AdminDashboard({ adminPassword, role }) {
             <button className="admin-menu-close" onClick={() => setMenuOpen(false)}><X size={20} /></button>
             <button className={adminPage === 'products' ? 'active' : ''} onClick={() => { setAdminPage('products'); setMenuOpen(false); }}>Products</button>
             <button className={adminPage === 'media' ? 'active' : ''} onClick={() => { setAdminPage('media'); setMenuOpen(false); }}>Media</button>
+            <button className={adminPage === 'collections' ? 'active' : ''} onClick={() => { setAdminPage('collections'); setMenuOpen(false); }}>Collections</button>
             <button className={adminPage === 'orders' ? 'active' : ''} onClick={() => { setAdminPage('orders'); setMenuOpen(false); }}>Orders</button>
             <button className={adminPage === 'subscribers' ? 'active' : ''} onClick={() => { setAdminPage('subscribers'); setMenuOpen(false); }}>Subscribers</button>
             <button className={adminPage === 'shipping' ? 'active' : ''} onClick={() => { setAdminPage('shipping'); setMenuOpen(false); }}>Shipping</button>
@@ -2447,6 +2927,7 @@ function AdminDashboard({ adminPassword, role }) {
       {adminPage === 'orders' && <AdminOrdersPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'products' && <AdminProductsPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'media' && <AdminMediaPage adminPassword={adminPassword} />}
+      {adminPage === 'collections' && <AdminCollectionsPage adminPassword={adminPassword} />}
       {adminPage === 'subscribers' && <AdminSubscribersPage adminPassword={adminPassword} />}
       {adminPage === 'shipping' && <AdminShippingPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'atcost' && <AdminOrderAtCostPage adminPassword={adminPassword} />}
@@ -3879,7 +4360,12 @@ export default function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/shop" element={<ShopPage />} />
               <Route path="/product/:id" element={<ProductPage />} />
-              <Route path="/collections" element={<CollectionsPage />} />
+              <Route path="/categories" element={<CategoriesPage />} />
+              {/* Old storefront path for the same board — kept so existing links,
+                  bookmarks and anything already indexed don't 404 after the rename. */}
+              <Route path="/collections" element={<CategoriesPage />} />
+              {/* Curated collections. Deliberately NOT in the header yet — awaiting sign-off. */}
+              <Route path="/collection" element={<CollectionsPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/info/:slug" element={<PolicyPage />} />
               <Route path="/checkout" element={<CheckoutPage />} />

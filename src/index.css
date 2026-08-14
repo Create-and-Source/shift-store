@@ -1096,6 +1096,103 @@ img { max-width: 100%; display: block; }
   gap: 16px;
 }
 
+/* ═══ COLLECTIONS PAGE (/collection) ═══
+   Each collection = a full-width editorial band (reuses .spread) followed by its
+   own product grid, so the photo sets the tone and the pieces sit right under it. */
+.collection + .collection {
+  border-top: 1px solid var(--gray-faint);
+}
+
+/* Tighter than a standalone .shop-grid — these grids stack down the page. */
+.collection-grid {
+  padding-top: 48px;
+  padding-bottom: 100px;
+}
+
+.collection-count {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+.collection-empty {
+  padding: 64px 40px 100px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--gray);
+}
+
+/* Placeholder when a collection has no photo set yet in the admin. */
+.collection-photo-empty {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-raised);
+  color: var(--gray);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 24px;
+}
+
+/* Countdown — only rendered while a timer is running (see useCountdown). */
+.countdown { margin-bottom: 32px; }
+
+.countdown-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--red);
+  margin-bottom: 14px;
+}
+
+.countdown-units {
+  display: flex;
+  gap: 10px;
+}
+
+.countdown-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 62px;
+  padding: 12px 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--gray-faint);
+}
+
+.countdown-num {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  /* Tabular figures stop the box jittering as the seconds tick over. */
+  font-variant-numeric: tabular-nums;
+  color: var(--white);
+}
+
+.countdown-key {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+@media (max-width: 640px) {
+  .countdown-unit { min-width: 52px; padding: 10px 6px; }
+  .countdown-num { font-size: 21px; }
+}
+
 /* ═══ PRODUCT PAGE ═══ */
 .pdp {
   padding-top: 100px;
@@ -3490,6 +3587,59 @@ img { max-width: 100%; display: block; }
 .admin-link-btn { background: none; border: none; font-size: 12px; color: #888; cursor: pointer; font-weight: 600; padding: 0; }
 .admin-link-btn.danger { color: #c0392b; }
 .admin-media-search { width: 100%; max-width: 360px; padding: 9px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; margin-bottom: 16px; }
+/* ── Admin → Collections ── */
+.admin-collection-new { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+.admin-collection-new input { padding: 9px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; min-width: 240px; }
+.admin-collection-card { border: 1px solid #e6e6e6; border-radius: 6px; background: #fff; padding: 14px; margin-bottom: 14px; }
+/* A hidden collection reads as "off" at a glance, without disappearing from the admin. */
+.admin-collection-card.is-hidden { opacity: 0.62; border-style: dashed; }
+.admin-collection-head { display: flex; align-items: center; gap: 12px; }
+.admin-collection-title strong { font-size: 14px; color: #111; display: block; }
+.tag-timer { color: #b8860b; font-weight: 700; }
+.admin-collection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.admin-collection-panel {
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid #eee;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.admin-collection-panel > label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .04em;
+}
+/* Buttons sit under the field they save, not centred in the panel. */
+.admin-collection-panel > .admin-desc-save { align-self: flex-start; }
+.admin-collection-panel input[type="text"],
+.admin-collection-panel input:not([type]),
+.admin-collection-panel input[type="datetime-local"],
+.admin-collection-panel textarea {
+  padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; color: #111;
+  font-weight: 400; text-transform: none; letter-spacing: 0; max-width: 520px;
+}
+.admin-collection-timer {
+  border: 1px solid #eee; border-radius: 6px; padding: 12px; background: #fafafa;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.admin-collection-timer > strong { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #111; }
+.admin-collection-timer label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .04em;
+}
+.admin-collection-products {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px;
+  max-height: 420px; overflow-y: auto;
+}
+.admin-collection-product {
+  display: flex; align-items: center; gap: 10px; padding: 8px; cursor: pointer;
+  border: 1px solid #eee; border-radius: 5px; background: #fff;
+}
+.admin-collection-product.is-in { border-color: #111; background: #fafafa; }
+.admin-collection-product strong { font-size: 12px; color: #111; display: block; }
+.admin-collection-product input[type="checkbox"] { flex: 0 0 auto; width: 16px; height: 16px; }
+
+@media (max-width: 640px) {
+  .admin-collection-products { grid-template-columns: 1fr; max-height: none; }
+  .admin-collection-new input { min-width: 0; flex: 1 1 100%; }
+}
+
 .admin-media-2col { display: grid; grid-template-columns: 340px 1fr; gap: 30px; align-items: start; }
 .admin-product-form { display: flex; flex-direction: column; gap: 12px; }
 .admin-product-form h3, .admin-custom-list h3 { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }

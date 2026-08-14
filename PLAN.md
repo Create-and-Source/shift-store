@@ -103,6 +103,48 @@ First live Printify order (#72b5834d) hit a race: the webhook creates the Printi
 - **/order-success → `/account?claim=1`** opens the page straight in reset mode: the guest's auth user already exists (webhook-created, passwordless), so the reset link is how they set a password and unlock the order history that is already theirs (RLS matches on `auth_id`, which was stamped at purchase).
 - **Tracking needs no account** — the shipped email carries it; the portal is a bonus. Shipping policy copy says so.
 
+## Categories vs Collections (2026-08-13)
+
+Two different things that used to share one word. **Categories** answer *what is it* — Hats,
+T Shirts, Pants, Hoodies, Shorts, Accessories, Athletic. **Collections** answer *what drop is it
+part of* — the OG Collection, the Summer Collection — and can pull products from **any** category
+(an OG hoodie is in Hoodies; an OG tee is in T Shirts; both can sit in the OG Collection).
+
+- The storefront board that lists Hats/T Shirts/… was labelled "Collections" while the admin called
+  the same rows categories. It now says **Categories** everywhere (header, mobile nav, footer, page
+  title) and lives at **`/categories`**. Its behaviour is unchanged — same tiles, same data, same
+  `/shop?category=` deep links. **`/collections` (plural) still resolves to that same board** so old
+  links, bookmarks and anything indexed don't 404.
+- ⚠️ There is still a **category** literally named "Summer Collection" (5 products). Left in place on
+  purpose — removing it would change the Shop filters and the homepage deep link
+  `/shop?category=Summer%20Collection`. Worth cleaning up once the collection version is populated.
+- ⚠️ `/collection` (singular) and `/collections` (plural) are one character apart and go to different
+  pages. Deliberate — `/collection` is what was asked for — but worth renaming if it ever confuses.
+
+### The collections feature (`/collection`)
+
+**Not in the header** — the route is live but unlinked, pending sign-off. Everything about a
+collection is managed in **/dashadmin → Collections** (both roles): photo, name, kicker line,
+description, which products are in it, whether it's hidden, and its countdown.
+
+- **Data**: `collections` (name/slug/label/blurb/image_url/sort_order/**hidden**/**countdown_ends_at**/
+  countdown_label) + `collection_products` (collection_id, product_id). Migration
+  **`supabase-collections.sql`**, which also seeds the two collections with their photos.
+  `product_id` is **text**, not uuid — Printify/Shopify ids are prefixed strings.
+  RLS on with no policies = service-role only, same as `owner_prices`/`settlements`.
+- **API `api/admin/collections.js`**: GET is public and feeds the storefront; POST needs an admin key.
+  **Hidden collections are filtered server-side for non-admin callers** (and their assignments with
+  them) — the public payload never carries a hidden collection, so nothing can reveal one client-side.
+  Every route answers "no collections" instead of 500ing if the migration hasn't been run yet.
+- **Countdown**: `countdown_ends_at` is UTC; the admin's `datetime-local` input converts on both
+  edges so 6 PM means 6 PM where she is, not on Vercel. The storefront ticks once a second and
+  **renders nothing when there's no timer or it has already expired** — the collection stays up, the
+  clock just disappears. The admin refuses a time in the past rather than saving a timer that would
+  never show.
+- **Hiding a product** was already built and is unchanged: `hidden_products` + the Show/Hide button on
+  the admin Products row. Hidden products are filtered out of the storefront feed centrally, so a
+  hidden product also vanishes from any collection it's in — no second place to remember.
+
 ## Customer portal (/account) — reworked 2026-07-20 (email-free auth)
 
 Supabase auth, **Sign In / Sign Up only** (Magic Link removed). **Email confirmation is OFF** — signup logs straight in, no email ever (the built-in sender was dead, and back when `/checkout` was auth-gated an unconfirmable account blocked ALL purchases; guest checkout has since removed that gate entirely). **Forgot password?** on Sign In → reset link → set-new-password card; that reset is the ONLY email the store sends, via custom SMTP (Resend, sender `shift@createandsource.com`, configured in Supabase → Auth → Emails). Buyers auto-created at purchase are passwordless — "Forgot password?" is how they claim their account. RLS verified: customers see only their own orders. Fixed 07-15: Site URL was `localhost:3000`, signup-then-buy account linkage.
