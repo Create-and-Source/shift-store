@@ -3865,3 +3865,5 @@ img { max-width: 100%; display: block; }
   .gal-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   .gal-bar .admin-media-search { max-width: none; flex: 1 1 100%; }
 }
+.gal-chip.k-site-dormant { background: #f7f4ea; color: #8a7233; }
+.gal-chip.k-site-dormant b { color: #6b5827; }

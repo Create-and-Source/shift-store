@@ -2931,6 +2931,7 @@ const USE_KIND = {
   collection: 'Collection',
   'custom-product': 'Custom product',
   site: 'On the site',
+  'site-dormant': 'In the code, not showing',
 };
 
 function UseChips({ uses = [], max = 3 }) {

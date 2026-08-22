@@ -49,33 +49,65 @@ export function normalizeUrl(raw) {
 // (Fingerprinting the 52×78 thumbnail separately is worse than useless: it's
 // too coarse to match its own full-size version.)
 const FE_RENDITION = /^(.*)-(product|zoom|thumbnail)\.(png|jpe?g)$/i
+
+// Our own hosts. An image's identity must not depend on which one the request
+// came in on — apex and www serve the same /lifestyle/car-meet.png, and keying
+// by full URL filed it as two different images depending on where you were
+// browsing from. Own-host URLs key by PATH.
+const OWN_HOST = /(^|\.)shiftapparelco\.com$|\.vercel\.app$/i
+export const SITE_BASE = 'https://shiftapparelco.com'
+
 export function canonicalKey(url) {
   const n = normalizeUrl(url)
   const m = n.match(FE_RENDITION)
-  return m ? `${m[1]}-product.${m[3]}` : n
+  if (m) return `${m[1]}-product.${m[3]}`
+  try {
+    const u = new URL(n)
+    if (OWN_HOST.test(u.hostname)) return u.pathname
+  } catch { /* not absolute — leave as-is */ }
+  return n
+}
+
+// The absolute, fetchable form of a canonical key.
+export function absoluteUrl(key) {
+  return key.startsWith('/') ? SITE_BASE + key : key
 }
 
 // Images the storefront renders straight out of /public. Not in any table —
 // they live in the code, so they live here too. Keep in step with App.jsx if
 // a new one is added; an image missing from this list simply reads as
 // "not used anywhere", never as a wrong answer.
+// Images the storefront renders straight out of /public — they live in the
+// code, so they live here too. AUDITED 2026-08-21 against every file in
+// public/: each entry below is a real reference in App.jsx or index.html.
+//
+// ⚠️ A missing entry reads as "not used", which is merely incomplete. A WRONG
+// entry reads as "used HERE", which is a confident false answer — that is the
+// dangerous direction, and it already happened once: six of these were listed
+// as homepage art when they are really the Categories page's FALLBACK tiles,
+// which render only when the store has no categories at all. `when` handles
+// that now — the condition is evaluated against live data, so a dormant
+// fallback says so instead of claiming a slot on the homepage.
 export const SITE_IMAGES = [
   ['/shift-logo.png', 'Logo — header, footer, hero, checkout, admin'],
-  ['/shift-logo-tagline.png', 'Logo with tagline'],
   ['/share-image.png', 'Link preview image (og:image)'],
-  ['/lifestyle/street-crossing.png', 'Homepage — hero background'],
+  ['/favicon-32.png', 'Browser tab icon'],
+  ['/icon-192.png', 'App icon'],
+  ['/apple-touch-icon.png', 'iPhone home-screen icon'],
+  ['/lifestyle/street-crossing.png', 'Homepage — hero still, behind the video'],
   ['/lifestyle/summer-collection.jpg', 'Homepage — Summer Collection spread'],
-  ['/lifestyle/shift-walk.jpg', 'Homepage — gallery strip'],
-  ['/lifestyle/shift-convertible.jpg', 'Homepage — gallery strip'],
-  ['/lifestyle/shift-caps.jpg', 'Homepage — gallery strip'],
-  ['/lifestyle/shift-alley.jpg', 'Homepage — gallery strip'],
-  ['/lifestyle/shift-skate.jpg', 'Homepage — gallery strip'],
-  ['/lifestyle/pizza-shop.png', 'Homepage — “Essentials” card'],
-  ['/lifestyle/car-meet.png', 'Homepage — “Racing” card'],
-  ['/lifestyle/convertible-pink-red.png', 'Homepage — “Fresh Drops” card'],
-  ['/lifestyle/subway.png', 'Homepage — “City Series” card'],
-  ['/lifestyle/chinatown.jpg', 'Homepage — “Chinatown” card'],
-  ['/lifestyle/nyc-crosswalk.png', 'Homepage — “NYC” card'],
+  ['/lifestyle/shift-walk.jpg', 'Homepage — photo grid'],
+  ['/lifestyle/shift-convertible.jpg', 'Homepage — photo grid'],
+  ['/lifestyle/shift-caps.jpg', 'Homepage — photo grid'],
+  ['/lifestyle/shift-alley.jpg', 'Homepage — photo grid'],
+  ['/lifestyle/shift-skate.jpg', 'Homepage — photo grid'],
+  // Categories-page fallback tiles — only rendered when NO categories exist.
+  ['/lifestyle/pizza-shop.png', 'Categories page — “Essentials” tile', 'no-categories'],
+  ['/lifestyle/car-meet.png', 'Categories page — “Racing” tile', 'no-categories'],
+  ['/lifestyle/convertible-pink-red.png', 'Categories page — “Fresh Drops” tile', 'no-categories'],
+  ['/lifestyle/subway.png', 'Categories page — “City Series” tile', 'no-categories'],
+  ['/lifestyle/chinatown.jpg', 'Categories page — “Chinatown” tile', 'no-categories'],
+  ['/lifestyle/nyc-crosswalk.png', 'Categories page — “NYC” tile', 'no-categories'],
 ]
 
 function sourceOf(productId = '') {
@@ -131,7 +163,7 @@ export async function buildUsageIndex(origin) {
     const key = canonicalKey(url)
     let img = images.get(key)
     if (!img) {
-      img = { key, url: key.startsWith('http') || key.startsWith('/') ? key : url, aliases: [], uses: [] }
+      img = { key, url: absoluteUrl(key.startsWith('http') || key.startsWith('/') ? key : url), aliases: [], uses: [] }
       images.set(key, img)
     }
     if (url !== img.url && !img.aliases.includes(url)) img.aliases.push(url)
@@ -217,9 +249,16 @@ export async function buildUsageIndex(origin) {
     if (p.image) add(p.image, null)
   }
 
-  // 6) Art the storefront renders from /public
-  for (const [path, where] of SITE_IMAGES) {
-    add(`${origin}${path}`, { kind: 'site', label: where, sub: 'Built into the site', refId: path })
+  // 6) Art the storefront renders from /public. A conditional entry whose
+  //    condition is false is recorded as DORMANT — the code points at it, but
+  //    nothing renders it today, so it must not read as "used".
+  const conditions = { 'no-categories': categories.length === 0 }
+  for (const [path, where, when] of SITE_IMAGES) {
+    const live = !when || conditions[when]
+    add(`${origin}${path}`, live
+      ? { kind: 'site', label: where, sub: 'Built into the site', refId: path }
+      : { kind: 'site-dormant', label: where, refId: path,
+          sub: `Not showing — the store has ${categories.length} categories, so this fallback never renders` })
   }
 
   return { images: [...images.values()], byKey: images, errors }

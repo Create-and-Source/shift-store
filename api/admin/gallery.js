@@ -96,7 +96,9 @@ function decorate(item, index, hashByKey) {
     tags: Array.isArray(item.tags) ? item.tags : [],
     uses,
     alsoAt,
-    used: uses.length > 0,
+    // A dormant reference — code that points at the file but never renders it
+    // today — is worth showing, but it is NOT the store using the photo.
+    used: uses.some(u => u.kind !== 'site-dormant'),
   }
 }
 
@@ -139,7 +141,7 @@ async function handleGet(req, res, origin) {
   // Everything the store uses, so the UI can offer "add these to the gallery"
   // and show what's still unfingerprinted.
   const storeImages = index.images
-    .filter(img => img.uses.length)
+    .filter(img => img.uses.some(u => u.kind !== 'site-dormant'))
     .map(img => ({
       key: img.key,
       url: img.url,
@@ -174,7 +176,7 @@ async function handleGet(req, res, origin) {
 async function scanUniverse(index) {
   const seen = new Map()
   for (const img of index.images) {
-    if (img.uses.length) seen.set(img.key, { key: img.key, url: img.url })
+    if (img.uses.length) seen.set(img.key, { key: img.key, url: img.url })  // dormant art still gets fingerprinted, so an upload of it is recognised
   }
   const files = await bucketFiles()
   for (const f of files) {
@@ -202,8 +204,42 @@ async function handlePost(req, res, origin) {
 // Fingerprint store images that don't have one yet, a batch at a time.
 // Called in a loop by the UI with a progress bar; stops on a time budget so
 // the function returns rather than being killed mid-batch.
+// The canonical form of a URL can change when the keying rules do (own-host
+// images moved from full URL to path). Rather than leave rows stranded under a
+// key nothing will ever look up again, migrate them on the next scan: rekey if
+// the canonical slot is free, drop the duplicate if it isn't.
+async function rekeyStaleRows() {
+  const moved = { library: 0, hashes: 0 }
+
+  const { data: rows } = await supabase.from('media_library').select('id, url, url_key')
+  const taken = new Set((rows || []).map(r => r.url_key))
+  for (const r of rows || []) {
+    const want = canonicalKey(r.url)
+    if (want === r.url_key) continue
+    if (taken.has(want)) {
+      await supabase.from('media_library').delete().eq('id', r.id)
+    } else {
+      await supabase.from('media_library').update({ url_key: want }).eq('id', r.id)
+      taken.add(want)
+    }
+    taken.delete(r.url_key)
+    moved.library++
+  }
+
+  // media_hashes is a disposable cache — a stale key just gets dropped and
+  // recomputed under the right one.
+  const { data: hashes } = await supabase.from('media_hashes').select('url_key, url')
+  const stale = (hashes || []).filter(h => canonicalKey(h.url) !== h.url_key).map(h => h.url_key)
+  if (stale.length) {
+    await supabase.from('media_hashes').delete().in('url_key', stale)
+    moved.hashes = stale.length
+  }
+  return moved
+}
+
 async function scanAction(req, res, origin) {
   const limit = Math.min(Number(req.body.limit) || 12, 40)
+  const rekeyed = await rekeyStaleRows()
   const index = await usageIndex(origin, { fresh: !!req.body.fresh })
   const universe = await scanUniverse(index)
 
@@ -245,6 +281,7 @@ async function scanAction(req, res, origin) {
     failed,
     remaining: Math.max(0, todo.length - done.length - failed.length),
     total: universe.length,
+    rekeyed: rekeyed.library || rekeyed.hashes ? rekeyed : undefined,
   })
 }
 
@@ -397,7 +434,7 @@ async function adoptAction(req, res, origin) {
   if (req.body.all) {
     const { data: have } = await supabase.from('media_library').select('url_key')
     const inGallery = new Set((have || []).map(h => h.url_key))
-    keys = index.images.filter(i => i.uses.length && !inGallery.has(i.key)).map(i => i.key)
+    keys = index.images.filter(i => i.uses.some(u => u.kind !== 'site-dormant') && !inGallery.has(i.key)).map(i => i.key)
   }
   if (!keys || !keys.length) return res.status(400).json({ error: 'Nothing to add' })
 
