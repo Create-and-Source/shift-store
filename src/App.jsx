@@ -2940,8 +2940,12 @@ function UseChips({ uses = [], max = 3 }) {
   return (
     <div className="gal-chips">
       {shown.map((u, i) => (
-        <span key={i} className={`gal-chip k-${u.kind}`} title={`${USE_KIND[u.kind] || u.kind} — ${u.label}${u.sub ? ' · ' + u.sub : ''}`}>
-          <b>{USE_KIND[u.kind] || u.kind}</b> {u.label}{u.sub ? <em> · {u.sub}</em> : null}
+        // viaCopy = this exact file isn't the one on the store, but the same
+        // picture is — say so, rather than letting a photo claim a slot that
+        // belongs to its twin.
+        <span key={i} className={`gal-chip k-${u.kind}${u.viaCopy ? ' via-copy' : ''}`}
+          title={`${u.viaCopy ? 'The same picture, saved elsewhere — ' : ''}${USE_KIND[u.kind] || u.kind} — ${u.label}${u.sub ? ' · ' + u.sub : ''}`}>
+          <b>{u.viaCopy ? 'Same picture' : USE_KIND[u.kind] || u.kind}</b> {u.label}{u.sub ? <em> · {u.sub}</em> : null}
         </span>
       ))}
       {uses.length > max && <span className="gal-chip more">+{uses.length - max} more</span>}

@@ -3867,3 +3867,5 @@ img { max-width: 100%; display: block; }
 }
 .gal-chip.k-site-dormant { background: #f7f4ea; color: #8a7233; }
 .gal-chip.k-site-dormant b { color: #6b5827; }
+.gal-chip.via-copy { background: #f2f2f6; color: #555; }
+.gal-chip.via-copy b { color: #6a6a80; }

@@ -181,6 +181,23 @@ cache keyed by canonical URL; disposable, a scan rebuilds it). RLS on with no po
 only, same posture as `owner_prices`/`settlements`/`collections`. `api/admin/gallery.js` answers
 "gallery not set up yet" rather than 500ing until the migration is run.
 
+⚠️ **The site list is hand-written, and a WRONG entry is the dangerous direction** (found 2026-08-21
+by Tovah, one day after shipping): the pink/red convertible hoodie photo was tagged "Homepage —
+Fresh Drops card" when it is on no page at all — App.jsx's `fallbackBoards` are the **Categories**
+page's tiles and render **only when the store has no categories**, and it has eight. Six entries were
+wrong that way, plus `shift-logo-tagline.png`, which nothing in the codebase references. The list was
+rebuilt from an audit of every file in `public/` against App.jsx + index.html + index.css (favicons
+and app icons were missing entirely). Conditional entries now carry a `when` evaluated against live
+data, so a dormant fallback reports **"in the code, not showing"** and does **not** count as used.
+**A missing entry reads "not used" — merely incomplete. A wrong entry reads "used HERE" — a confident
+false answer.** Re-audit the list whenever homepage/Categories art changes.
+
+⚠️ **Own-host images key by PATH, not by URL** (same fix): `/lifestyle/car-meet.png` was filing
+itself as two different images depending on whether the request arrived on the apex or on `www`, so a
+photo could sit in the gallery twice. `canonicalKey` now strips our own hosts (`*.shiftapparelco.com`,
+`*.vercel.app`) down to the path, and rows written under the old form **migrate themselves on the
+next scan** (`rekeyStaleRows` — rekey if the canonical slot is free, drop the duplicate if it isn't).
+
 - **Fingerprinting the store runs itself** on first open (batched, with a progress line) — matching
   can't work until it has, so it isn't hidden behind a button she'd have to know about.
 - **"Add them all"** pulls every in-use store image into the gallery without copying a byte.
@@ -190,6 +207,22 @@ only, same posture as `owner_prices`/`settlements`/`collections`. `api/admin/gal
 - **Delete refuses** while anything on the store still shows that photo, and names where.
 - Uploads are processed **one at a time on purpose** — two in flight could each decide the other's
   photo was new and store it twice.
+- A photo used somewhere under a **different** URL shows as "**Same picture** — …" rather than
+  claiming that slot as its own (`viaCopy`). This is how `og-collection.jpg` and `car-meet.png` read:
+  the collection photo was made from the car-meet shot, so they fingerprint as one picture.
+
+### What the first real run turned up (2026-08-21, her Desktop `SHIFT` folder, 82 images)
+
+**50 already on the store · 24 new · 7 the same file saved twice · 1 orphan** (`traffic-waffle-knit-t-
+89f8ed72.png` — uploaded once, shown nowhere). The nine `b1e7b585-…` files matched **byte-for-byte**;
+they are downloads of Fulfill Engine's own photos. Distances on the "same photo, different export"
+matches ran **0–20 out of 1024** — nothing came near the 40 line, and nothing landed in the maybe band.
+
+⚠️ **Seven photos are each doing duty on TWO product listings** — same picture, two URLs, two
+listings: Unisex Regular Fit Shorts + OG Fit Shorts · OG Kids' Tee + Snow Washed Kids' T-Shirt · OG
+Faded Sweatpants + Sunfade Loose Fit Cotton Sweatpants · Summer Blues Crewneck + Summer Collection
+Crewneck · OG Yoga Sports Bra + OG Longline Sports Bra · OG Faded Black Hoodie + OG Faded Bone Hoodie.
+Same shape as the known duplicate "OG Heavy Tee" pair. Nothing was changed — her call.
 
 ## ⚠️ Newsletter capture — zero signups ever (found 2026-08-13)
 
