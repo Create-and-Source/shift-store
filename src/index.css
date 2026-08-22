@@ -3732,3 +3732,136 @@ img { max-width: 100%; display: block; }
      forces main-thread raster on iOS Safari and stutters the marquee. */
   .pmar-row { -webkit-mask-image: none; mask-image: none; }
 }
+
+/* ═══ ADMIN GALLERY ═══ */
+.gal-drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  border: 2px dashed #cfcfcf; border-radius: 10px; padding: 30px 20px; cursor: pointer;
+  background: #fafafa; color: #666; text-align: center; margin-bottom: 16px; transition: border-color .15s, background .15s;
+}
+.gal-drop:hover, .gal-drop.over { border-color: #111; background: #f2f2f2; color: #111; }
+.gal-drop.busy { opacity: .6; cursor: default; }
+.gal-drop input { display: none; }
+.gal-drop strong { font-size: 14px; color: #111; }
+.gal-drop span { font-size: 12px; color: #999; }
+.admin-media-status.warn { background: #fff6e6; color: #8a5a00; }
+.gal-setup { border: 1px solid #e6e6e6; border-radius: 8px; padding: 20px; background: #fffbe9; }
+.gal-setup strong { display: block; font-size: 14px; margin-bottom: 6px; }
+.gal-setup p { font-size: 13px; color: #666; }
+.gal-setup code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-size: 12px; }
+
+/* what each uploaded file turned out to be */
+.gal-run { border: 1px solid #e6e6e6; border-radius: 8px; background: #fff; margin-bottom: 20px; overflow: hidden; }
+.gal-run-head {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #f6f6f6;
+  border-bottom: 1px solid #eee; font-size: 12px;
+}
+.gal-run-head strong { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.gal-run-head span { flex: 1; color: #777; }
+.gal-run-row { display: flex; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #f2f2f2; align-items: flex-start; flex-wrap: wrap; }
+.gal-run-row:last-child { border-bottom: none; }
+.gal-run-row.s-in-use { background: #f4fbf5; }
+.gal-run-row.s-stored-already { background: #f6f6f6; }
+.gal-run-row.s-maybe { background: #fffaf0; }
+.gal-run-row.s-error { background: #fdf3f3; }
+.gal-run-thumb { width: 44px; height: 44px; flex: 0 0 44px; border-radius: 4px; background: #f0f0f0 center/cover no-repeat; }
+.gal-run-body { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px; }
+.gal-run-body strong { font-size: 12px; color: #111; word-break: break-all; }
+.gal-run-status { font-size: 12px; color: #666; display: flex; align-items: center; gap: 5px; }
+
+/* side-by-side "is this the same photo?" */
+.gal-compare { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; width: 100%; margin-top: 6px; }
+.gal-compare figure { margin: 0; text-align: center; }
+.gal-compare img { width: 96px; height: 96px; object-fit: cover; border-radius: 5px; border: 1px solid #e2e2e2; display: block; background: #fff; }
+.gal-compare figcaption { font-size: 10px; color: #999; margin-top: 4px; text-transform: uppercase; letter-spacing: .05em; }
+.gal-compare-ctrls { display: flex; flex-direction: column; gap: 8px; }
+.gal-compare-ctrls > div { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.gal-adopt {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  border: 1px solid #e6e6e6; border-radius: 8px; padding: 14px; background: #fff; margin-bottom: 18px;
+}
+.gal-adopt div { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 3px; }
+.gal-adopt strong { font-size: 13px; color: #111; }
+.gal-adopt span { font-size: 12px; color: #888; }
+
+.gal-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.gal-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.gal-filters button {
+  background: #f2f2f2; border: none; border-radius: 20px; padding: 6px 13px; font-size: 12px;
+  font-weight: 700; color: #777; cursor: pointer;
+}
+.gal-filters button.active { background: #111; color: #fff; }
+
+.gal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 14px; align-items: start; }
+.gal-card { border: 1px solid #e6e6e6; border-radius: 8px; background: #fff; overflow: hidden; }
+.gal-card.used { border-color: #cfe4d2; }
+.gal-card.pending { border-color: #e9d08a; }
+.gal-thumb { aspect-ratio: 1 / 1; background: #f4f4f4 center/cover no-repeat; position: relative; cursor: pointer; }
+.gal-thumb.sm { width: 46px; height: 46px; aspect-ratio: auto; flex: 0 0 46px; border-radius: 4px; cursor: default; }
+.gal-flag {
+  position: absolute; top: 8px; left: 8px; font-size: 9px; font-weight: 700; padding: 3px 7px;
+  border-radius: 3px; text-transform: uppercase; letter-spacing: .05em; color: #fff;
+}
+.gal-flag.yes { background: #2f7d40; }
+.gal-flag.no { background: #9a9a9a; }
+.gal-flag.check { background: #b8860b; }
+.gal-origin {
+  position: absolute; bottom: 8px; right: 8px; font-size: 9px; font-weight: 700; padding: 3px 6px;
+  border-radius: 3px; background: rgba(0,0,0,.6); color: #fff; text-transform: uppercase; letter-spacing: .04em;
+}
+.gal-card-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.gal-card-body > strong { font-size: 12px; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.gal-chips { display: flex; flex-direction: column; gap: 3px; }
+.gal-chip {
+  font-size: 11px; color: #444; background: #f4f4f4; border-radius: 4px; padding: 3px 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gal-chip b { font-weight: 700; color: #111; }
+.gal-chip em { font-style: normal; color: #999; }
+.gal-chip.none { color: #aaa; background: none; padding-left: 0; }
+.gal-chip.more { color: #888; background: none; padding-left: 0; }
+.gal-chip.k-feed { background: #eef3fa; }
+.gal-chip.k-category, .gal-chip.k-collection { background: #f6eef7; }
+.gal-chip.k-site { background: #f0f5ee; }
+
+.gal-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.gal-tags span {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 10px; color: #666;
+  border: 1px solid #e4e4e4; border-radius: 12px; padding: 2px 7px;
+}
+.gal-detail { border-top: 1px solid #f0f0f0; padding-top: 8px; display: flex; flex-direction: column; gap: 10px; }
+.gal-uses-full { display: flex; flex-direction: column; gap: 4px; }
+.gal-pending { background: #fffaf0; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.gal-pending p { font-size: 12px; color: #7a5a10; }
+.gal-pending > div:last-child { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gal-tag-edit { display: flex; flex-direction: column; gap: 4px; }
+.gal-tag-edit input { padding: 7px 9px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; }
+.gal-card-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.gal-card-actions .admin-link-btn { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+
+.gal-modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 900;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.gal-modal-panel {
+  background: #fff; border-radius: 10px; width: min(520px, 100%); max-height: 80vh;
+  display: flex; flex-direction: column; padding: 20px; position: relative; gap: 12px;
+}
+.gal-modal-head { display: flex; align-items: center; gap: 12px; }
+.gal-modal-head strong { font-size: 14px; display: block; }
+.gal-modal-scroll { overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.gal-modal-scroll .admin-src-tag { margin-top: 10px; }
+.gal-target {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+  background: #fff; border: 1px solid #eee; border-radius: 5px; padding: 8px 10px; cursor: pointer;
+  font-size: 12px; color: #111; text-align: left;
+}
+.gal-target:hover { border-color: #111; }
+.gal-target em { font-style: normal; font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: .04em; }
+
+@media (max-width: 640px) {
+  .gal-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .gal-bar .admin-media-search { max-width: none; flex: 1 1 100%; }
+}

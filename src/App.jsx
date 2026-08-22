@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader, Package, Truck, Eye, LogOut, Lock, Mail, Clock, Search, Download } from 'lucide-react';
+import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader, Package, Truck, Eye, LogOut, Lock, Mail, Clock, Search, Download, Upload, Trash2, Tag, RefreshCw, AlertTriangle } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
 /* ═══ PRODUCTS CONTEXT — merges Fulfill Engine + Printify + Shopify ═══ */
@@ -2878,6 +2878,496 @@ function AdminMediaPage({ adminPassword }) {
   );
 }
 
+/* ═══ ADMIN GALLERY — every mockup, and where each one is used ═══ */
+
+// Resize + encode for the gallery. Mirrors the store's uploader, with two
+// differences that matter for matching: it caps at 1600px (a little more
+// detail than a product photo needs, still well inside a serverless request
+// body), and if a PNG comes out too heavy it re-encodes as JPEG on a WHITE
+// background — the same white the server composites transparency onto, so
+// the fingerprint of a transparent mockup still lines up with the store's
+// copy of it.
+function fileToGalleryDataUrl(file, maxDim = 1600) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Could not read that image'));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const isPng = /png/i.test(file.type);
+        let out = canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.85);
+        // Vercel caps a request body at ~4.5 MB; base64 inflates by a third.
+        if (out.length > 3_400_000) {
+          ctx.globalCompositeOperation = 'destination-over';
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          ctx.globalCompositeOperation = 'source-over';
+          out = canvas.toDataURL('image/jpeg', 0.85);
+        }
+        resolve(out);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+const USE_KIND = {
+  'product-photo': 'On a product',
+  feed: 'Supplier photo',
+  category: 'Category',
+  collection: 'Collection',
+  'custom-product': 'Custom product',
+  site: 'On the site',
+};
+
+function UseChips({ uses = [], max = 3 }) {
+  if (!uses.length) return <span className="gal-chip none">Not used anywhere</span>;
+  const shown = uses.slice(0, max);
+  return (
+    <div className="gal-chips">
+      {shown.map((u, i) => (
+        <span key={i} className={`gal-chip k-${u.kind}`} title={`${USE_KIND[u.kind] || u.kind} — ${u.label}${u.sub ? ' · ' + u.sub : ''}`}>
+          <b>{USE_KIND[u.kind] || u.kind}</b> {u.label}{u.sub ? <em> · {u.sub}</em> : null}
+        </span>
+      ))}
+      {uses.length > max && <span className="gal-chip more">+{uses.length - max} more</span>}
+    </div>
+  );
+}
+
+const STATUS_TEXT = {
+  'in-use': 'Already on the store',
+  'stored-already': 'Already uploaded before',
+  duplicate: 'Already in the gallery',
+  maybe: 'Looks like one on the store',
+  new: 'Added — not used yet',
+  error: 'Failed',
+};
+
+function AdminGalleryPage({ adminPassword }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [uploads, setUploads] = useState([]);
+  const [uploadAt, setUploadAt] = useState(0);      // index of the file in flight
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [scan, setScan] = useState(null);           // { done, total } while fingerprinting
+  const [dragOver, setDragOver] = useState(false);
+  const [openItem, setOpenItem] = useState(null);   // id of the expanded card
+  const [assignFor, setAssignFor] = useState(null); // item being placed on the store
+  const [targets, setTargets] = useState(null);     // lazy-loaded products/categories/collections
+  const scanning = useRef(false);
+
+  const post = async (body) => {
+    const res = await fetch('/api/admin/gallery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed');
+    return json;
+  };
+
+  const load = async (fresh) => {
+    const res = await fetch(`/api/admin/gallery${fresh ? '?fresh=1' : ''}`, { headers: { 'x-admin-key': adminPassword } });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Could not load the gallery');
+    setData(json);
+    return json;
+  };
+
+  // Fingerprint whatever the store uses but hasn't been read yet. Until this
+  // finishes, an upload can't be recognised — so it runs by itself on first
+  // open rather than hiding behind a button she'd have to know about.
+  const runScan = async (first) => {
+    if (scanning.current) return;
+    scanning.current = true;
+    try {
+      let total = first.scan.total;
+      let remaining = first.scan.remaining;
+      setScan({ done: total - remaining, total });
+      for (let i = 0; i < 80 && remaining > 0; i++) {
+        const r = await post({ action: 'scan', limit: 12 });
+        remaining = r.remaining;
+        total = r.total || total;
+        setScan({ done: total - remaining, total });
+      }
+      await load();
+    } catch (e) {
+      setMsg(`Fingerprinting stopped: ${e.message}`);
+    }
+    setScan(null);
+    scanning.current = false;
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const json = await load();
+        setLoading(false);
+        if (!json.needsSetup && json.scan?.remaining) runScan(json);
+      } catch (e) {
+        setMsg(e.message);
+        setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── uploading ──
+  // One at a time on purpose: each file is matched against everything already
+  // known, and two in flight at once could each decide the other's photo is
+  // new and store it twice.
+  const uploadFiles = async (fileList) => {
+    const files = [...fileList].filter(f => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif)$/i.test(f.name));
+    if (!files.length) return;
+    setBusy(true);
+    setMsg('');
+    setUploads(files.map(f => ({ name: f.name, status: 'waiting' })));
+    for (let i = 0; i < files.length; i++) {
+      setUploadAt(i);
+      setUploads(u => u.map((x, ix) => (ix === i ? { ...x, status: 'working' } : x)));
+      try {
+        const dataUrl = await fileToGalleryDataUrl(files[i]);
+        const r = await post({ action: 'ingest', dataUrl, filename: files[i].name });
+        if (r.needsSetup) throw new Error(r.error);
+        setUploads(u => u.map((x, ix) => (ix === i ? { ...x, ...r, status: r.status } : x)));
+      } catch (e) {
+        setUploads(u => u.map((x, ix) => (ix === i ? { ...x, status: 'error', error: e.message } : x)));
+      }
+    }
+    setBusy(false);
+    await load(true);
+  };
+
+  const withBusy = async (label, fn) => {
+    setBusy(true); setMsg(label);
+    try { await fn(); setMsg(''); }
+    catch (e) { setMsg(e.message); }
+    setBusy(false);
+  };
+
+  const resolveMatch = (item, same) => withBusy(same ? 'Swapping in the store copy…' : 'Keeping yours…', async () => {
+    await post({ action: 'resolveMatch', id: item.id, same });
+    setUploads(u => u.map(x => (x.item?.id === item.id ? { ...x, status: same ? 'in-use' : 'new', resolved: true } : x)));
+    await load(true);
+  });
+
+  const remove = (item) => withBusy('Deleting…', async () => {
+    try {
+      await post({ action: 'remove', id: item.id });
+    } catch (e) {
+      setMsg(e.message);  // "still on the store" comes back as a refusal, not a crash
+      await load(true);
+      return;
+    }
+    await load(true);
+  });
+
+  const saveTags = (item, raw) => withBusy('Saving tags…', async () => {
+    await post({ action: 'tag', id: item.id, tags: raw });
+    await load();
+  });
+
+  const adoptAll = () => withBusy('Adding the store\'s images…', async () => {
+    const r = await post({ action: 'adopt', all: true });
+    await load(true);
+    setMsg(`Added ${r.added} store image${r.added === 1 ? '' : 's'} to the gallery ✓`);
+  });
+
+  // Products/categories/collections to put a photo on — only fetched when she
+  // actually opens the picker.
+  const loadTargets = async () => {
+    if (targets) return targets;
+    const [catRes, colRes, feRes, pfRes, shRes] = await Promise.all([
+      fetch('/api/admin/categories'),
+      fetch('/api/admin/collections'),
+      fetch('/api/products'),
+      fetch('/api/printify/products').catch(() => null),
+      fetch('/api/shopify/products').catch(() => null),
+    ]);
+    const cat = await catRes.json().catch(() => ({}));
+    const col = await colRes.json().catch(() => ({}));
+    const fe = await feRes.json().catch(() => ({}));
+    const pf = pfRes ? await pfRes.json().catch(() => ({})) : {};
+    const sh = shRes ? await shRes.json().catch(() => ({})) : {};
+    const t = {
+      categories: cat.categories || [],
+      collections: col.collections || [],
+      products: [...(fe.products || []), ...(pf.products || []), ...(sh.products || [])],
+    };
+    setTargets(t);
+    return t;
+  };
+
+  const assign = (item, target) => withBusy('Putting it on the store…', async () => {
+    await post({ action: 'assign', id: item.id, target });
+    setAssignFor(null);
+    await load(true);
+  });
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><Loader size={24} className="spin" /></div>;
+
+  if (data?.needsSetup) {
+    return (
+      <div className="admin-media">
+        <div className="gal-setup">
+          <strong>The gallery needs its tables first.</strong>
+          <p>Run <code>supabase-media-gallery.sql</code> in Supabase → SQL Editor, then reload this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const items = (data?.items || []).filter(item => {
+    if (filter === 'used' && !item.used) return false;
+    if (filter === 'unused' && item.used) return false;
+    if (filter === 'pending' && !item.pending_match) return false;
+    if (!search) return true;
+    const hay = [item.filename, ...(item.tags || []), ...item.uses.map(u => `${u.label} ${u.sub || ''}`)]
+      .join(' ').toLowerCase();
+    return hay.includes(search.toLowerCase());
+  });
+
+  const stats = data?.stats || {};
+  const runCounts = uploads.reduce((acc, u) => { acc[u.status] = (acc[u.status] || 0) + 1; return acc; }, {});
+
+  return (
+    <div className="admin-media">
+      <p className="admin-media-hint">
+        Drop in every mockup you have. Each one is matched against what the store is actually
+        showing — <strong>by the picture, not the filename</strong> — so a resized re-export still
+        recognises itself. If a photo is already on the store, yours is thrown away and the store's
+        own copy takes its place here, carrying the list of where it appears.
+      </p>
+
+      {/* ── drop zone ── */}
+      <label
+        className={`gal-drop${dragOver ? ' over' : ''}${busy ? ' busy' : ''}`}
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={e => { e.preventDefault(); setDragOver(false); if (!busy) uploadFiles(e.dataTransfer.files); }}
+      >
+        <input type="file" accept="image/*" multiple disabled={busy}
+          onChange={e => { uploadFiles(e.target.files); e.target.value = ''; }} />
+        <Upload size={22} />
+        <strong>{busy && uploads.length ? `Reading ${uploadAt + 1} of ${uploads.length}…` : 'Drop mockups here, or click to choose'}</strong>
+        <span>As many at a time as you like</span>
+      </label>
+
+      {scan && (
+        <div className="admin-media-status">
+          <Loader size={12} className="spin" />
+          Reading the store's images so uploads can be matched — {scan.done} of {scan.total}
+        </div>
+      )}
+      {msg && <div className="admin-media-status">{busy && <Loader size={12} className="spin" />} {msg}</div>}
+      {!!data?.feedErrors?.length && (
+        <div className="admin-media-status warn">
+          <AlertTriangle size={12} /> Couldn't read {data.feedErrors.join('; ')} — photos from there can't be matched right now.
+        </div>
+      )}
+
+      {/* ── what just happened to each file ── */}
+      {!!uploads.length && (
+        <div className="gal-run">
+          <div className="gal-run-head">
+            <strong>This upload</strong>
+            <span>
+              {['in-use', 'stored-already', 'new', 'duplicate', 'maybe', 'error'].filter(k => runCounts[k]).map(k =>
+                `${runCounts[k]} ${STATUS_TEXT[k].toLowerCase()}`).join(' · ')}
+            </span>
+            <button className="admin-link-btn" onClick={() => setUploads([])}>Clear</button>
+          </div>
+          {uploads.map((u, i) => (
+            <div key={i} className={`gal-run-row s-${u.status}`}>
+              <div className="gal-run-thumb" style={u.item?.url ? { backgroundImage: `url(${u.item.url})` } : {}} />
+              <div className="gal-run-body">
+                <strong>{u.name}</strong>
+                <span className="gal-run-status">
+                  {u.status === 'working' && <><Loader size={11} className="spin" /> Matching…</>}
+                  {u.status === 'waiting' && 'Waiting'}
+                  {u.status === 'error' && <>Failed — {u.error}</>}
+                  {u.status === 'in-use' && <>Already on the store{u.match?.level === 'exact' ? ' (same file)' : ''} — the store's copy is in the gallery now</>}
+                  {u.status === 'duplicate' && 'You already have this one in the gallery'}
+                  {u.status === 'stored-already' && 'This file was already uploaded to the store at some point — using that copy. Nothing is showing it right now.'}
+                  {u.status === 'new' && 'Added to the gallery — not used anywhere yet'}
+                  {u.status === 'maybe' && 'Close to a photo the store is using — is it the same one?'}
+                </span>
+                {(u.status === 'in-use' || u.status === 'duplicate' || u.status === 'stored-already') && <UseChips uses={u.item?.uses || u.uses || []} />}
+              </div>
+              {u.status === 'maybe' && !u.resolved && (
+                <div className="gal-compare">
+                  <figure><img src={u.item.url} alt="" /><figcaption>Yours</figcaption></figure>
+                  <figure><img src={u.candidate.url} alt="" /><figcaption>On the store</figcaption></figure>
+                  <div className="gal-compare-ctrls">
+                    <UseChips uses={u.candidate.uses} max={2} />
+                    <div>
+                      <button className="admin-upload-btn" disabled={busy} onClick={() => resolveMatch(u.item, true)}>Same photo</button>
+                      <button className="admin-link-btn" disabled={busy} onClick={() => resolveMatch(u.item, false)}>Different — keep mine</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── store images that aren't in the gallery yet ── */}
+      {stats.notInGallery > 0 && (
+        <div className="gal-adopt">
+          <div>
+            <strong>{stats.notInGallery} image{stats.notInGallery === 1 ? '' : 's'} the store is using {stats.notInGallery === 1 ? "isn't" : "aren't"} in the gallery.</strong>
+            <span>Product mockups, supplier photos, category and collection art. Adding them doesn't copy or change anything.</span>
+          </div>
+          <button className="admin-upload-btn" disabled={busy} onClick={adoptAll}>Add them all</button>
+        </div>
+      )}
+
+      {/* ── filters ── */}
+      <div className="gal-bar">
+        <div className="gal-filters">
+          {[['all', `All ${stats.total || 0}`], ['used', `Used ${stats.used || 0}`], ['unused', `Not used ${stats.unused || 0}`],
+            ...(stats.pending ? [['pending', `Needs a look ${stats.pending}`]] : [])].map(([k, label]) => (
+            <button key={k} className={filter === k ? 'active' : ''} onClick={() => setFilter(k)}>{label}</button>
+          ))}
+        </div>
+        <input className="admin-media-search" placeholder="Search filename, tag, or where it's used…"
+          value={search} onChange={e => setSearch(e.target.value)} style={{ marginBottom: 0 }} />
+        <button className="admin-link-btn" disabled={busy} onClick={() => withBusy('Refreshing…', () => load(true))}>
+          <RefreshCw size={12} /> Refresh
+        </button>
+      </div>
+
+      {/* ── the gallery ── */}
+      {!items.length && <p className="admin-media-empty">Nothing here yet — drop some mockups above.</p>}
+      <div className="gal-grid">
+        {items.map(item => (
+          <div key={item.id} className={`gal-card${item.used ? ' used' : ''}${item.pending_match ? ' pending' : ''}`}>
+            <div className="gal-thumb" style={{ backgroundImage: `url(${item.url})` }}
+              onClick={() => setOpenItem(openItem === item.id ? null : item.id)}>
+              <span className={`gal-flag ${item.pending_match ? 'check' : item.used ? 'yes' : 'no'}`}>
+                {item.pending_match ? 'Check this' : item.used ? 'Used' : 'Not used'}
+              </span>
+              {item.origin === 'store' && <span className="gal-origin">Store copy</span>}
+            </div>
+            <div className="gal-card-body">
+              <strong title={item.filename || item.url}>{item.filename || 'Store photo'}</strong>
+              <UseChips uses={item.uses} max={2} />
+              {!!item.tags.length && (
+                <div className="gal-tags">{item.tags.map(t => <span key={t}><Tag size={9} /> {t}</span>)}</div>
+              )}
+              {openItem === item.id && (
+                <div className="gal-detail">
+                  {item.pending_match && (
+                    <div className="gal-pending">
+                      <p>This looked like a photo the store is using. Is it the same one?</p>
+                      <div className="gal-compare">
+                        <figure><img src={item.url} alt="" /><figcaption>Yours</figcaption></figure>
+                        <figure><img src={item.pending_match.url} alt="" /><figcaption>On the store</figcaption></figure>
+                      </div>
+                      <UseChips uses={item.pending_match.uses} max={2} />
+                      <div>
+                        <button className="admin-upload-btn" disabled={busy} onClick={() => resolveMatch(item, true)}>Same photo</button>
+                        <button className="admin-link-btn" disabled={busy} onClick={() => resolveMatch(item, false)}>Different — keep mine</button>
+                      </div>
+                    </div>
+                  )}
+                  {item.uses.length > 0 && (
+                    <div className="gal-uses-full">
+                      <span className="admin-src-tag">Used in {item.uses.length} place{item.uses.length === 1 ? '' : 's'}</span>
+                      <UseChips uses={item.uses} max={20} />
+                    </div>
+                  )}
+                  <label className="gal-tag-edit">
+                    <span className="admin-src-tag">Tags</span>
+                    <input defaultValue={item.tags.join(', ')} placeholder="summer, hats, instagram…" disabled={busy}
+                      onBlur={e => { if (e.target.value !== item.tags.join(', ')) saveTags(item, e.target.value); }} />
+                  </label>
+                  <div className="gal-card-actions">
+                    <button className="admin-upload-btn" disabled={busy}
+                      onClick={async () => { await loadTargets(); setAssignFor(item); }}>Use on…</button>
+                    <a className="admin-link-btn" href={item.url} target="_blank" rel="noreferrer">Open</a>
+                    <button className="admin-link-btn danger" disabled={busy} onClick={() => remove(item)}>
+                      <Trash2 size={12} /> Delete
+                    </button>
+                  </div>
+                  {item.width ? <div className="admin-src-tag">{item.width}×{item.height} · {Math.round((item.bytes || 0) / 1024)} KB</div> : null}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── put a photo to work ── */}
+      {assignFor && targets && (
+        <AssignPicker item={assignFor} targets={targets} busy={busy}
+          onClose={() => setAssignFor(null)} onPick={t => assign(assignFor, t)} />
+      )}
+    </div>
+  );
+}
+
+// Where a gallery photo can go. Products append (they hold a list of mockups);
+// a category or collection has exactly one photo, so picking one replaces it.
+function AssignPicker({ item, targets, busy, onClose, onPick }) {
+  const [q, setQ] = useState('');
+  const products = targets.products.filter(p => !q || p.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="gal-modal" onClick={onClose}>
+      <div className="gal-modal-panel" onClick={e => e.stopPropagation()}>
+        <button className="admin-menu-close" onClick={onClose}><X size={18} /></button>
+        <div className="gal-modal-head">
+          <div className="gal-thumb sm" style={{ backgroundImage: `url(${item.url})` }} />
+          <div>
+            <strong>Use this photo on…</strong>
+            <span className="admin-src-tag">{item.filename || 'Store photo'}</span>
+          </div>
+        </div>
+        <input className="admin-media-search" placeholder="Search products…" value={q} onChange={e => setQ(e.target.value)} />
+        <div className="gal-modal-scroll">
+          <span className="admin-src-tag">Products — adds it to the product's photos</span>
+          {products.map(p => (
+            <button key={p.id} className="gal-target" disabled={busy} onClick={() => onPick({ kind: 'product', refId: p.id })}>
+              <span>{p.name}</span><em>{p.source || 'fulfillengine'}</em>
+            </button>
+          ))}
+          <span className="admin-src-tag">Categories — replaces the category photo</span>
+          {targets.categories.map(c => (
+            <button key={c.id} className="gal-target" disabled={busy} onClick={() => onPick({ kind: 'category', refId: c.id })}>
+              <span>{c.name}</span><em>category</em>
+            </button>
+          ))}
+          <span className="admin-src-tag">Collections — replaces the collection photo</span>
+          {targets.collections.map(c => (
+            <button key={c.id} className="gal-target" disabled={busy} onClick={() => onPick({ kind: 'collection', refId: c.id })}>
+              <span>{c.name}</span><em>collection</em>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminDashboard({ adminPassword, role }) {
   const [adminPage, setAdminPage] = useState('orders');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -2915,6 +3405,7 @@ function AdminDashboard({ adminPassword, role }) {
             <button className="admin-menu-close" onClick={() => setMenuOpen(false)}><X size={20} /></button>
             <button className={adminPage === 'products' ? 'active' : ''} onClick={() => { setAdminPage('products'); setMenuOpen(false); }}>Products</button>
             <button className={adminPage === 'media' ? 'active' : ''} onClick={() => { setAdminPage('media'); setMenuOpen(false); }}>Media</button>
+            <button className={adminPage === 'gallery' ? 'active' : ''} onClick={() => { setAdminPage('gallery'); setMenuOpen(false); }}>Gallery</button>
             <button className={adminPage === 'collections' ? 'active' : ''} onClick={() => { setAdminPage('collections'); setMenuOpen(false); }}>Collections</button>
             <button className={adminPage === 'orders' ? 'active' : ''} onClick={() => { setAdminPage('orders'); setMenuOpen(false); }}>Orders</button>
             <button className={adminPage === 'subscribers' ? 'active' : ''} onClick={() => { setAdminPage('subscribers'); setMenuOpen(false); }}>Subscribers</button>
@@ -2927,6 +3418,7 @@ function AdminDashboard({ adminPassword, role }) {
       {adminPage === 'orders' && <AdminOrdersPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'products' && <AdminProductsPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'media' && <AdminMediaPage adminPassword={adminPassword} />}
+      {adminPage === 'gallery' && <AdminGalleryPage adminPassword={adminPassword} />}
       {adminPage === 'collections' && <AdminCollectionsPage adminPassword={adminPassword} />}
       {adminPage === 'subscribers' && <AdminSubscribersPage adminPassword={adminPassword} />}
       {adminPage === 'shipping' && <AdminShippingPage adminPassword={adminPassword} role={role} />}

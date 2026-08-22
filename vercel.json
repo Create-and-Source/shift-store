@@ -1,12 +1,26 @@
 {
   "functions": {
-    "api/webhook.js": { "maxDuration": 60 }
+    "api/webhook.js": {
+      "maxDuration": 60
+    },
+    "api/admin/gallery.js": {
+      "maxDuration": 60
+    }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "crons": [
-    { "path": "/api/sync-tracking", "schedule": "0 */6 * * *" }
+    {
+      "path": "/api/sync-tracking",
+      "schedule": "0 */6 * * *"
+    }
   ]
 }

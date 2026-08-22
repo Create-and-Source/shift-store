@@ -134,6 +134,63 @@ sweep in ~18 unrelated products, which is exactly why membership is explicit tic
 ⚠️ **Two different products both display as "OG Heavy Tee"** (the real OG Heavy T and the renamed
 AS Colour Mens Heavy Tee) — they read as duplicates anywhere they appear together.
 
+## Media Gallery — "is this photo being used, and where?" (2026-08-21)
+
+**/dashadmin → Gallery.** Drop in any number of mockups at once; each one is matched against every
+image the store is actually showing, **by the picture rather than the filename**, and the answer
+comes back per file:
+
+| verdict | what happens |
+|---|---|
+| already on the store | **her upload is discarded** and the store's own copy is what lands in the gallery, carrying the list of places it appears |
+| already uploaded before | matched a file sitting in storage that nothing currently shows — that copy is reused, flagged "not used anywhere" |
+| already in the gallery | nothing is stored twice |
+| looks like one on the store | **both are kept** and shown side by side — she says same/different |
+| new | stored, flagged as used nowhere yet |
+
+**Fingerprinting** (`api/_lib/imagehash.js`) — three signatures per image: `sha256` (exact bytes),
+`phash` (1024-bit dHash, 33×32 grayscale) and `chash` (4×4 average-RGB grid). Pure JS on purpose
+(`jpeg-js` + `pngjs`, no native binary) so this Mac and a Vercel function compute the same bits — a
+perceptual hash that differs per machine is worthless. Alpha composites onto **white** on both sides,
+because half the mockups are transparent PNGs and the two copies have to land on the same background.
+
+⚠️ **The thresholds are CALIBRATED against real store images, not guessed** (measured 2026-08-21):
+
+- same photo through the browser's upload pipeline (1400px + JPEG q82) → **19** / 1024
+- same photo, FE's "product" vs "zoom" rendition → **9**
+- DIFFERENT: **front vs back of the same black leggings → 70**
+- DIFFERENT: leggings vs hoodie → 337
+
+Auto-adopt sits at **40** — above every same-image case, well below 70. At the more usual 256-bit
+resolution those leggings are **7 bits apart** and would have been silently auto-matched, throwing
+away the wrong file; that pair is why this runs at 1024 bits with a colour check beside it. Anything
+in 41–110 is a "**maybe**": both files are kept and she decides. FE's 52×78 thumbnails can't match
+their own full-size image at any honest threshold, which is why the index treats FE's
+`-product`/`-zoom`/`-thumbnail` triplet as **one image** (`canonicalKey`) instead of three.
+
+**Where "used" comes from** (`api/_lib/imageusage.js`, read live on every request — never cached in a
+table, so an un-assignment reads as unused immediately): `product_overrides.image_urls`, the three
+supplier feeds (through the store's own public endpoints, so it describes exactly what the storefront
+shows), `categories.image_url`, `collections.image_url`, `custom_products.image_urls`, and a
+hard-coded `SITE_IMAGES` list of the art in `/public` that App.jsx renders. Shopify's `?v=` cache
+buster is stripped; **Printify's `?camera_label=` is NOT** — that one picks a different mockup.
+
+**Tables** (`supabase-media-gallery.sql`): `media_library` (the gallery — `storage_path` set only for
+files we host, null when it merely points at a store/CDN image) and `media_hashes` (a fingerprint
+cache keyed by canonical URL; disposable, a scan rebuilds it). RLS on with no policies = service-role
+only, same posture as `owner_prices`/`settlements`/`collections`. `api/admin/gallery.js` answers
+"gallery not set up yet" rather than 500ing until the migration is run.
+
+- **Fingerprinting the store runs itself** on first open (batched, with a progress line) — matching
+  can't work until it has, so it isn't hidden behind a button she'd have to know about.
+- **"Add them all"** pulls every in-use store image into the gallery without copying a byte.
+- **"Use on…"** puts a gallery photo onto a product / category / collection — the same URL is what
+  the store starts serving, which is what keeps "used / not used" answerable afterwards. ⚠️ The
+  product path carries name/price/description across, per the `setOverride` rule above.
+- **Delete refuses** while anything on the store still shows that photo, and names where.
+- Uploads are processed **one at a time on purpose** — two in flight could each decide the other's
+  photo was new and store it twice.
+
 ## ⚠️ Newsletter capture — zero signups ever (found 2026-08-13)
 
 Measured directly in the database: **`subscribers` = 0 rows · `customers` = 25 (all 25 with an email)
