@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, createContext, useContext } from 'react';
+import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader, Package, Truck, Eye, LogOut, Lock, Mail, Clock, Search, Download, Upload, Trash2, Tag, RefreshCw, AlertTriangle } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
@@ -573,6 +573,129 @@ function ProductCarousel({ products: items }) {
 
 /* ═══ PAGES ═══ */
 
+// The creator spread used to own this slot on its own until the Summer
+// Collection replaced it (d351003). It is a slide again now, kept last so the
+// live collections lead — and it is the reason the section can never come up
+// empty: if the collections fetch fails, this alone still renders.
+const CREATOR_SLIDE = {
+  key: 'creator',
+  image: '/lifestyle/creator.jpg',
+  alt: 'Meet the creator — SHIFT',
+  title: 'Meet the Creator',
+  body: "The heart of this brand is the belief that life's unexpected turns are opportunities to shift, adapt, and move forward. SHIFT was inspired by my own challenges and pivot points in life — knowing growth comes from change. We're here to encourage you to move with purpose, embrace new paths, and ALWAYS keep moving forward. Life keeps moving, so should you.",
+  to: '/about',
+  cta: 'View the Mission',
+};
+
+const SPREAD_ROTATE_MS = 7000;
+
+// Rotates the homepage spread through every live collection, then the creator.
+// Hidden collections never arrive here at all — the public feed strips them
+// server-side — so hiding one in /dashadmin takes it off the homepage too.
+function HomeSpread() {
+  const [collections, setCollections] = useState([]);
+  const [step, setStep] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const reduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/admin/collections')
+      .then(r => r.json())
+      .then(d => { if (alive) setCollections(d.collections || []); })
+      .catch(() => {});   // the creator slide still renders — section never empties
+    return () => { alive = false; };
+  }, []);
+
+  const slides = useMemo(() => [
+    // A collection with no photo would render an empty half, so it sits this out.
+    ...collections.filter(c => c.image_url).map(c => ({
+      key: c.id,
+      image: c.image_url,
+      alt: `SHIFT ${c.name}`,
+      label: c.label,
+      title: c.name,
+      body: c.blurb,
+      endsAt: c.countdown_ends_at,
+      countdownLabel: c.countdown_label,
+      // Each band on /collection carries id={slug}, so this lands on the
+      // collection itself rather than the top of the page.
+      to: `/collection#${c.slug}`,
+      cta: 'Shop the Collection',
+    })),
+    CREATOR_SLIDE,
+  ], [collections]);
+
+  // The slides arrive after first paint, so the index is read modulo the current
+  // length — otherwise it points past the end the moment the fetch lands.
+  const i = step % slides.length;
+  const slide = slides[i];
+
+  useEffect(() => {
+    if (paused || reduceMotion || slides.length < 2) return;
+    const id = setInterval(() => setStep(n => n + 1), SPREAD_ROTATE_MS);
+    return () => clearInterval(id);
+  }, [paused, reduceMotion, slides.length]);
+
+  return (
+    <section
+      className="spread"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={() => setPaused(false)}
+    >
+      <div className="spread-img glitch-img-wrap">
+        {/* Every photo stays mounted and stacked; only opacity changes, so the
+            cross-fade is a CSS transition rather than anything JS has to drive.
+            A JS-driven fade stalls outright in a background tab (rAF stops
+            ticking) and can leave the panel showing the wrong slide, or none. */}
+        {slides.map((s, n) => (
+          <img
+            key={s.key}
+            className={`spread-photo${n === i ? ' is-on' : ''}`}
+            src={thumb(s.image, 1400)}
+            alt={n === i ? s.alt : ''}
+            aria-hidden={n !== i}
+            loading="lazy"
+            style={{ objectPosition: 'center 30%' }}
+          />
+        ))}
+      </div>
+
+      <div className="spread-text">
+        {/* Keyed so React remounts it per slide, which replays the CSS entrance.
+            The base style is already the visible one — if the animation never
+            runs, the copy simply appears, it does not stay invisible. */}
+        <div className="spread-slide" key={slide.key}>
+            {slide.label && <div className="spread-label">{slide.label}</div>}
+            <h2 className="spread-title"><GlitchText>{slide.title}</GlitchText></h2>
+            {slide.body && <p className="spread-body">{slide.body}</p>}
+            <CollectionCountdown endsAt={slide.endsAt} label={slide.countdownLabel} />
+            <Link to={slide.to} className="spread-link">
+              {slide.cta} <ArrowRight size={14} />
+            </Link>
+        </div>
+
+        {slides.length > 1 && (
+          <div className="spread-dots">
+            {slides.map((s, n) => (
+              <button
+                key={s.key}
+                type="button"
+                className={`spread-dot${n === i ? ' is-on' : ''}`}
+                aria-label={`Show ${s.title}`}
+                aria-current={n === i}
+                onClick={() => setStep(n)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function HomePage() {
   const { products, customCategories } = useProducts();
   const featured = products.slice(0, 16);
@@ -636,27 +759,8 @@ function HomePage() {
         </p>
       </motion.section>
 
-      {/* SPREAD — Summer Collection */}
-      <section className="spread">
-        <div className="spread-img glitch-img-wrap">
-          <img src="/lifestyle/summer-collection.jpg" alt="SHIFT Summer Collection — on the boardwalk" loading="lazy" style={{ objectPosition: 'center 30%' }} />
-        </div>
-        <motion.div
-          className="spread-text"
-          initial={{ opacity: 0, x: 40 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.7 }}
-        >
-          <h2 className="spread-title"><GlitchText>Summer Collection</GlitchText></h2>
-          <p className="spread-body">
-            Long days, salt air, and nowhere in particular to be. The Summer Collection is cut for the season that never sits still — coastal graphics, washed crewnecks, and easy layers that carry from a boardwalk morning straight through to sunset. Life keeps moving, so should you.
-          </p>
-          <Link to="/shop?category=Summer%20Collection" className="spread-link">
-            Shop the Collection <ArrowRight size={14} />
-          </Link>
-        </motion.div>
-      </section>
+      {/* SPREAD — rotates through the live collections, then Meet the Creator */}
+      <HomeSpread />
 
       {/* PULLQUOTE */}
       <motion.section

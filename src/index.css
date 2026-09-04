@@ -459,6 +459,48 @@ img { max-width: 100%; display: block; }
 
 .spread-img:hover img { transform: scale(1.03); }
 
+/* Rotating spread: the photos stack so one can fade in over the other. Without
+   this they would replace each other and blink the panel empty mid-swap. */
+.spread-img .spread-photo {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity .6s ease;
+}
+.spread-img .spread-photo.is-on { opacity: 1; }
+
+/* The entrance is decoration only: the slide's resting style is the visible
+   one, so if the animation never runs (background tab, reduced motion) the
+   copy still reads correctly rather than sitting at opacity 0. */
+.spread-slide { animation: spreadSlideIn .5s ease; }
+@keyframes spreadSlideIn {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spread-slide { animation: none; }
+  .spread-img .spread-photo { transition: none; }
+}
+
+.spread-dots {
+  display: flex;
+  gap: 10px;
+  margin-top: 36px;
+}
+.spread-dot {
+  width: 28px;
+  height: 3px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.22);
+  cursor: pointer;
+  transition: background .25s ease, width .25s ease;
+}
+.spread-dot:hover { background: rgba(255,255,255,0.45); }
+.spread-dot.is-on { background: var(--red); width: 44px; }
+.spread-dot:focus-visible { outline: 2px solid var(--red); outline-offset: 3px; }
+
 .spread-img::after {
   content: '';
   position: absolute;
