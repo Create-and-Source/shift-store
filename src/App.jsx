@@ -285,6 +285,9 @@ function Header() {
           <nav className="header-nav">
             <Link to="/shop">Shop</Link>
             <Link to="/categories">Categories</Link>
+            {/* Singular /collection — the drops board. /collections (plural) is
+                an old alias pointing at Categories; do not link that one here. */}
+            <Link to="/collection">Collections</Link>
             <Link to="/about">About</Link>
             <Link to="/account">Account</Link>
           </nav>
@@ -307,6 +310,7 @@ function Header() {
         <Link to="/" onClick={() => setMobileOpen(false)}>Home</Link>
         <Link to="/shop" onClick={() => setMobileOpen(false)}>Shop</Link>
         <Link to="/categories" onClick={() => setMobileOpen(false)}>Categories</Link>
+        <Link to="/collection" onClick={() => setMobileOpen(false)}>Collections</Link>
         <Link to="/about" onClick={() => setMobileOpen(false)}>About</Link>
         <Link to="/account" onClick={() => setMobileOpen(false)}>Account</Link>
       </div>
@@ -399,6 +403,7 @@ function Footer() {
           <h4>Company</h4>
           <Link to="/about">About</Link>
           <Link to="/categories">Categories</Link>
+          <Link to="/collection">Collections</Link>
         </div>
         <div className="footer-col">
           <h4>Info</h4>
