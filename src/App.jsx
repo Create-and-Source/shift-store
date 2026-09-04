@@ -587,7 +587,7 @@ const CREATOR_SLIDE = {
   cta: 'View the Mission',
 };
 
-const SPREAD_ROTATE_MS = 6000;
+const SPREAD_ROTATE_MS = 5000;
 
 // Rotates the homepage spread through every live collection, then the creator.
 // Hidden collections never arrive here at all — the public feed strips them
