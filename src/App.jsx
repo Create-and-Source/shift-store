@@ -2693,6 +2693,11 @@ function AdminMediaPage({ adminPassword }) {
   const [busy, setBusy] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [ovSearch, setOvSearch] = useState('');
+  // Drag-to-reorder a product's photos. `list` is the live preview order — the
+  // strip renders from it while a drag is in flight, so the tiles shuffle under
+  // the cursor and only the drop writes to the server.
+  const [photoDrag, setPhotoDrag] = useState(null); // { productId, from, list }
+  const [fileOver, setFileOver] = useState(null);   // productId a Finder drag is hovering
 
   const load = async () => {
     setLoading(true);
@@ -2748,20 +2753,30 @@ function AdminMediaPage({ adminPassword }) {
   });
 
   // ── Overrides on feed products ──
-  const addOverrideImage = (product, file) => withBusy('Uploading mockup…', async () => {
-    const url = await uploadImageFile(file, { folder: 'overrides', name: product.name, adminPassword });
-    const cur = overrides[product.id] || {};
-    await post('/api/admin/content', {
-      action: 'setOverride',
-      productId: product.id,
-      imageUrls: [...(cur.image_urls || []), url],
-      name: cur.name || null,
-      price: cur.price ?? null,
-      description: cur.description || null,
-    });
-    setStatusMsg('Mockup added ✓');
-    await load();
-  });
+  // Takes any number of files and writes ONCE. Uploading in a loop that saved
+  // per file would read the same stale `overrides` each time and each write
+  // would clobber the one before it — drop three photos, keep one.
+  const addOverrideImages = (product, files) => withBusy(
+    files.length > 1 ? `Uploading ${files.length} mockups…` : 'Uploading mockup…',
+    async () => {
+      const urls = [];
+      for (const file of files) {
+        urls.push(await uploadImageFile(file, { folder: 'overrides', name: product.name, adminPassword }));
+      }
+      const cur = overrides[product.id] || {};
+      await post('/api/admin/content', {
+        action: 'setOverride',
+        productId: product.id,
+        imageUrls: [...(cur.image_urls || []), ...urls],
+        name: cur.name || null,
+        price: cur.price ?? null,
+        description: cur.description || null,
+      });
+      setStatusMsg(urls.length > 1 ? `${urls.length} mockups added ✓` : 'Mockup added ✓');
+      await load();
+    }
+  );
+  const addOverrideImage = (product, file) => addOverrideImages(product, [file]);
   const clearOverride = (productId) => withBusy('Clearing…', async () => {
     await post('/api/admin/content', { action: 'clearOverride', productId });
     await load();
@@ -2793,6 +2808,51 @@ function AdminMediaPage({ adminPassword }) {
     const arr = [...(overrides[product.id]?.image_urls || [])];
     arr.splice(index, 1);
     saveOverrideImages(product, arr);
+  };
+
+  // ── Drag to reorder ──────────────────────────────────────────────────
+  // The photos shuffle live as you drag; nothing is saved until you drop, so
+  // an abandoned drag (Esc, or letting go outside the strip) leaves the stored
+  // order untouched. The ‹ › buttons still work — keyboard and touch need them.
+  const photoOrder = (product) =>
+    (photoDrag?.productId === product.id ? photoDrag.list : overrides[product.id]?.image_urls) || [];
+
+  const onPhotoDragStart = (product, index, e) => {
+    // Firefox refuses to start a drag without payload on the transfer.
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(index)); } catch { /* Safari can throw here */ }
+    setPhotoDrag({ productId: product.id, from: index, list: [...(overrides[product.id]?.image_urls || [])] });
+  };
+
+  const onPhotoDragOver = (product, index, e) => {
+    if (!photoDrag || photoDrag.productId !== product.id) return;
+    e.preventDefault();               // without this the drop never fires
+    e.dataTransfer.dropEffect = 'move';
+    if (index === photoDrag.from) return;
+    const list = [...photoDrag.list];
+    const [moved] = list.splice(photoDrag.from, 1);
+    list.splice(index, 0, moved);
+    setPhotoDrag({ ...photoDrag, from: index, list });
+  };
+
+  const onPhotoDrop = (product, e) => {
+    // Files dragged in from Finder land here too — that's an upload, not a
+    // reorder. Anything that isn't an image is ignored rather than uploaded.
+    const files = [...(e.dataTransfer?.files || [])].filter(f => f.type.startsWith('image/'));
+    if (files.length) {
+      e.preventDefault();
+      setPhotoDrag(null);
+      if (!busy) addOverrideImages(product, files);
+      return;
+    }
+    if (!photoDrag || photoDrag.productId !== product.id) return;
+    e.preventDefault();
+    const list = photoDrag.list;
+    const before = overrides[product.id]?.image_urls || [];
+    setPhotoDrag(null);
+    // Dropping something back where it started is not worth a write.
+    if (list.length === before.length && list.every((u, i) => u === before[i])) return;
+    saveOverrideImages(product, list);
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><Loader size={24} className="spin" /></div>;
@@ -2838,11 +2898,12 @@ function AdminMediaPage({ adminPassword }) {
       {/* ── Product Photos (overrides) ── */}
       {section === 'overrides' && (
         <div className="admin-media-body">
-          <p className="admin-media-hint">Add your own mockups to any product. Use the <strong>‹ ›</strong> arrows to order them — the first one leads on the storefront — and <strong>×</strong> to delete. Your photos show <strong>alongside</strong> the originals.</p>
+          <p className="admin-media-hint"><strong>Drag a photo</strong> to put it where you want — the first one leads on the storefront. The <strong>‹ ›</strong> arrows do the same thing a step at a time, and <strong>×</strong> deletes. Your photos show <strong>alongside</strong> the originals.</p>
           <input className="admin-media-search" placeholder="Search products…" value={ovSearch} onChange={e => setOvSearch(e.target.value)} />
           <div className="admin-photo-list">
             {filteredFeed.map(p => {
-              const imgs = overrides[p.id]?.image_urls || [];
+              const imgs = photoOrder(p);
+              const dragging = photoDrag?.productId === p.id;
               const original = p.image || p.colors?.[0]?.images?.[0]?.url;
               return (
                 <div key={p.id} className="admin-photo-row">
@@ -2853,9 +2914,35 @@ function AdminMediaPage({ adminPassword }) {
                       <div className="admin-src-tag">{p.source} · {imgs.length} uploaded</div>
                     </div>
                   </div>
-                  <div className="admin-photo-strip">
+                  <div
+                    className={`admin-photo-strip${dragging ? ' is-reordering' : ''}${fileOver === p.id ? ' is-file-over' : ''}`}
+                    onDragOver={e => {
+                      // Without preventDefault the browser opens the dropped
+                      // file instead of handing it to us.
+                      const hasFiles = [...(e.dataTransfer?.types || [])].includes('Files');
+                      if (dragging || hasFiles) e.preventDefault();
+                      if (hasFiles && fileOver !== p.id) setFileOver(p.id);
+                    }}
+                    onDragLeave={e => {
+                      if (!e.currentTarget.contains(e.relatedTarget)) setFileOver(null);
+                    }}
+                    onDrop={e => { setFileOver(null); onPhotoDrop(p, e); }}
+                  >
                     {imgs.map((url, idx) => (
-                      <div key={url + idx} className="admin-photo-item" style={{ backgroundImage: `url(${url})` }}>
+                      <div
+                        key={url}
+                        className={`admin-photo-item${dragging && photoDrag.from === idx ? ' is-dragging' : ''}`}
+                        style={{ backgroundImage: `url(${url})` }}
+                        draggable={!busy}
+                        onDragStart={e => onPhotoDragStart(p, idx, e)}
+                        onDragOver={e => onPhotoDragOver(p, idx, e)}
+                        // No onDrop here on purpose: the drop bubbles to the
+                        // strip, and a handler on both fired twice per drop —
+                        // setPhotoDrag(null) has not committed yet when the
+                        // second one runs, so it saved the same order twice.
+                        onDragEnd={() => setPhotoDrag(null)}
+                        title="Drag to reorder"
+                      >
                         {idx === 0 && <span className="admin-photo-lead">Leads</span>}
                         <div className="admin-photo-ctrls">
                           <button title="Move earlier" disabled={busy || idx === 0} onClick={() => moveOverrideImage(p, idx, -1)}>‹</button>

@@ -3681,7 +3681,19 @@ img { max-width: 100%; display: block; }
 .admin-photo-item {
   position: relative; width: 84px; height: 84px; border-radius: 6px;
   background-size: cover; background-position: center; border: 1px solid #e2e2e2; overflow: hidden;
+  cursor: grab;
+  transition: transform .12s ease, box-shadow .12s ease;
 }
+.admin-photo-item:active { cursor: grabbing; }
+/* The tile under the cursor: dimmed so the gap it will land in reads clearly. */
+.admin-photo-item.is-dragging { opacity: .35; transform: scale(.94); }
+/* While a drag is in flight the other tiles lift slightly as they shuffle. */
+.admin-photo-strip.is-reordering .admin-photo-item:not(.is-dragging) {
+  box-shadow: 0 2px 8px rgba(0,0,0,.14);
+}
+/* The buttons stay clickable, but dragging one shouldn't drag the tile out
+   from under the click — the tile itself is the drag handle. */
+.admin-photo-ctrls button { -webkit-user-drag: none; }
 .admin-photo-lead {
   position: absolute; top: 4px; left: 4px; background: #111; color: #fff; font-size: 8px; font-weight: 700;
   padding: 2px 5px; border-radius: 3px; text-transform: uppercase; letter-spacing: .04em;
@@ -3696,6 +3708,16 @@ img { max-width: 100%; display: block; }
 .admin-photo-ctrls button:disabled { opacity: .3; cursor: default; }
 .admin-photo-ctrls button.del { color: #ff7a7a; font-weight: 700; }
 .admin-thumb-add.lg { width: 84px; height: 84px; }
+/* Dropping photos in from Finder — the whole strip is the target. */
+.admin-photo-strip {
+  border-radius: 8px;
+  transition: background .12s ease, box-shadow .12s ease;
+}
+.admin-photo-strip.is-file-over {
+  background: #f0f6ff;
+  box-shadow: inset 0 0 0 2px #2b6cff;
+}
+.admin-photo-strip.is-file-over .admin-photo-item { pointer-events: none; }
 
 /* ═══ PRODUCT MARQUEE — two rows, auto-scroll + user can grab/swipe ═══ */
 .pmar {
