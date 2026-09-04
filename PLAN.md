@@ -121,10 +121,17 @@ part of* — the OG Collection, the Summer Collection — and can pull products 
 - ⚠️ `/collection` (singular) and `/collections` (plural) are one character apart and go to different
   pages. Deliberate — `/collection` is what was asked for — but worth renaming if it ever confuses.
 
-**Live state 2026-08-14**: migration APPLIED, both collections seeded with their photos and visible,
-**0 products assigned** (Tovah is assigning them — "dont add anythign to the collections, I will do
-that"). Verified live: public GET returns both, POST 401s unauthenticated and with a wrong key, both
-photos load, all three routes serve.
+**Live state 2026-09-04**: migration APPLIED, both collections visible with photos, and **Tovah has
+assigned products herself** — The "OG" Collection **19 assigned / 18 shown** (`OG Yoga Sports Bra` is on
+the hidden-products list, so the hidden-product filter correctly drops it out of the collection too),
+Summer Collection **6**. Every member name-matches its collection. Verified live: public GET returns
+both, POST 401s unauthenticated and with a wrong key, both photos load, all three routes serve.
+
+**Collections are now LINKED (2026-09-04, `0d44fb7`)** — header, mobile nav and footer, beside
+Categories. ⚠️ Every link points at **`/collection` SINGULAR**. `/collections` plural renders the
+*Categories* board, so linking that instead lands everyone on the wrong page while looking correct;
+there is a comment at the header link saying so. Desktop nav hides below 1024px and the five items
+measure 565px, which clears the logo and cart.
 
 ⚠️ **"OG" is a display RENAME across most of the catalog** — Market Bag → "OG Market Bag", the AS Colour
 tee → "OG Heavy Tee", the yoga leggings and sports bra too. Matching a collection by product name would
@@ -133,6 +140,82 @@ sweep in ~18 unrelated products, which is exactly why membership is explicit tic
 
 ⚠️ **Two different products both display as "OG Heavy Tee"** (the real OG Heavy T and the renamed
 AS Colour Mens Heavy Tee) — they read as duplicates anywhere they appear together.
+
+## Homepage spread rotator (2026-09-04, `8d60094` + `7fcbe93` + `553d461`)
+
+The homepage `.spread` slot held one hardcoded Summer Collection block. It now **rotates through every
+live collection, then Meet the Creator** — the block this slot used to hold on its own before `d351003`
+replaced it. Photo, small label, name, blurb and **countdown** all come from `/dashadmin → Collections`,
+so the homepage follows whatever she edits there with no code change. **Hiding a collection removes it
+from the homepage for free** (the public feed strips hidden ones server-side, so they never arrive).
+Each CTA deep-links **`/collection#<slug>`**, which the bands on that page already answer to via
+`id={slug}`.
+
+**Speed: 5s a slide** (`SPREAD_ROTATE_MS`), 15s for the full cycle of three. Was 6s for one commit;
+Tovah's call after seeing it.
+
+⚠️ **The rotation is deliberately NOT driven by framer-motion, and must not be "improved" back to it.**
+Built that way first and the panel froze — three photos stacked, the creator still showing while the
+dots had moved on. **In a background tab `requestAnimationFrame` stops ticking**, so the exit animation
+under `AnimatePresence mode="wait"` never completes and the copy never swaps; `initial={{opacity:0}}`
+compounds it by leaving content *invisible* rather than merely unanimated. Backgrounding a tab is
+ordinary behaviour. So the slide is plain React state: the photos stay mounted and cross-fade on
+`opacity`, and the copy's resting style is the visible one with the entrance as pure CSS garnish.
+**Never gate what the page SAYS on an animation completing.**
+
+⚠️ **Three things I built in each stopped the rotation dead** (fixed in `7fcbe93`, worth not
+reintroducing):
+- **Hover pause** — the band is full width and 80vh, so a resting cursor froze it for most of a desktop
+  visit. On **touch it was permanent**: a tap fires `mouseenter` and no `mouseleave` ever follows, so it
+  stopped on first tap and never resumed. Hover no longer pauses at all.
+- **`prefers-reduced-motion` disabled auto-advance outright**, leaving those visitors on slide one
+  forever. It now still rotates; the CSS already drops the fade and the transform for them, so they get
+  an instant cut — which is what the setting actually asks for.
+- What *does* stop it: keyboard focus landing inside (it must not change under someone tabbing to the
+  CTA), and **clicking a dot**, which hands control to the visitor and is the pause mechanism hover was
+  never a reliable substitute for. Click a dot and it stays put until reload — by design.
+
+Degradation: a collection with **no photo sits the rotation out** rather than rendering an empty half,
+and if the collections fetch **fails the creator slide alone still renders**, so the section can never
+come up empty. All three slides measure 706px, so there is no height jump despite the creator copy
+being much longer.
+
+## Hero video (2026-09-04, `15fca56`)
+
+`public/videos/shift-hero.mp4` is now Tovah's "My Movie.mov" — NYC brownstone street, 5.4s. Source was
+**72 MB of 1920×1080 ProRes 422**; shipped as **960×540 H.264, 3.1 MB**.
+
+Recipe (this Mac has **no ffmpeg, no HandBrakeCLI, no brew** — see memory `media-compression-avconvert`):
+`/usr/bin/avconvert -p Preset960x540 -s in.mov -o out.mp4`.
+
+- **960×540 over 1280×720 on evidence, not spec**: built both, compared frames upscaled to full width,
+  indistinguishable — the footage is soft-focus behind the subject, so the extra 1.6 MB bought nothing.
+  `PresetMediumQuality` is only 568×320 and is too soft stretched full-width.
+- ⚠️ **Always confirm the codec is `avc1` and NOT HEVC** (`hvc1`/`hev1`) — Safari plays HEVC, Chrome and
+  Firefox silently do not. `grep -a -o -m1 -E 'avc1|hvc1|hev1' file.mp4`.
+- Confirm `moov` sits before `mdat` so it streams instead of waiting on the whole file.
+- **Overwriting in place is safe here**: the site serves videos `cache-control: public, max-age=0,
+  must-revalidate` with an ETag, so browsers revalidate and pick up a new file without a filename change.
+- ⚠️ A first attempt used a **15s** clip: same preset, **7.9 MB**. Length is what drives hero weight.
+
+## Product photos: drag to reorder, drop files to upload (2026-09-04, `c813a5f`)
+
+`/dashadmin → Media → Product Photos`. Photos can be dragged straight into position (the tiles shuffle
+live and only the drop writes, so an abandoned drag leaves the stored order alone), and image files
+dropped in from Finder upload. A file drag carries `dataTransfer.files` and a tile drag does not, so the
+two never collide. The `‹ › ×` buttons stay — keyboard and touch have no HTML5 drag.
+
+⚠️ Two bugs found while testing, both worth not reintroducing:
+- **`addOverrideImage` uploaded, saved and reloaded per file off a stale `overrides` closure.** Looping
+  it over a multi-file drop meant each write clobbered the one before — drop three photos, keep one.
+  `addOverrideImages` now uploads all, then writes **once**.
+- **`onDrop` on both the tile and the strip fired twice per drop** — the drop bubbles, and
+  `setPhotoDrag(null)` has not committed when the second handler runs. Only the strip handles it now.
+
+Also `c9af769`: the Gallery photo picker called `/api/admin/collections` **without the admin key**, so
+the public filter stripped every **hidden** collection out of its target list — exactly the not-yet-live
+ones she would be attaching a photo to. (The "where is this photo used" index was never affected; it
+reads the table directly with the service role.)
 
 ## Media Gallery — "is this photo being used, and where?" (2026-08-21)
 
@@ -300,6 +383,82 @@ Three organic orders within ~40 min: Michael Sperando $41.99 (#0e39c000), Genaro
 
 ⚠ Watch: all three sat "Processing" with a red warning in FE and empty Date-fulfilled — check whether FE needs manual pay/approve for production (like the earlier hat); if so, orders don't produce until she does. **07-21: at least one was an out-of-stock blank** — Tovah handling the order itself; the store-side fix (stock awareness + loud failures) shipped same day, see its section.
 
+## Unit economics + the affiliate question (measured 2026-09-04)
+
+Tovah was weighing an **affiliate programme**. Measured off the live feeds (`/api/products`,
+printify, shopify) against the retail layer (`/api/admin/content`), 33 products. **No order history
+was available** (no `.env` locally), so there is no AOV, repeat rate or return rate here — those
+decide whether affiliate *works*; this decides whether it *can*.
+
+Retail is set at a near-uniform **~42% markup on cost**, which is **~30% of retail**, and Stripe takes
+it from there. Median product: retail $29.99, cost $20.98, gross $9.01, **net $7.85 = 25.4% of retail**.
+OG Faded Hoodie nets $16.39 (25.6%); OG Heavy Tee $8.02 (25.1%); OG Market Bag $2.97 (24.8%). Apparel
+brands typically run 60–70% gross. **SHIFT runs 30% before Stripe, 25% after — that is the whole story.**
+
+**There is no basket-size leverage**: shipping is calibrated to real supplier bills, so a bigger cart
+adds shipping cost at the same rate it adds shipping revenue. Three tees instead of one moves margin
+25.1% → 26.0%.
+
+On an OG Heavy Tee ($31.99): a **10%** commission leaves $4.82, **15%** leaves $3.22 (60% of all
+profit gone), **20%** leaves $1.62. The realistic ask is commission **plus** a discount code for the
+audience: *15% off + 10% commission = $0.64*, and *20% off + 15% commission = **−$2.04***.
+
+**Verdict: do not run affiliate at these prices.** The affordable rate is ~5–8% of retail, below what
+creators accept, before the programme's own build cost. **The binding constraint is price, not the
+commission rate** — that tee costs $22.50 and sells for $31.99 where comparable heavyweight streetwear
+sells $45–65. At **$39.99 the same 15% programme pays the affiliate $6.00 and still nets $9.79** — more
+than she makes today with no affiliate at all. Sequence: **reprice, prove the higher price converts,
+then recruit.** (Also: much affiliate volume is coupon/loyalty sites intercepting demand you already
+had, so you pay commission on sales you would have made.)
+
+⚠️ **If discount codes are ever built, the Connect split will bite.** `csShareCents()` computes the
+platform fee from **owner price + shipping, independent of what the customer actually pays**, so a
+discount comes **100% out of the brand's cut**. It is capped at the order total, meaning a deep enough
+code routes the entire payment to C&S and leaves the brand paying the Stripe fee out of pocket. The fee
+formula must become discount-aware **before** any coupon exists. There is currently **no coupon,
+discount or referral infrastructure anywhere in the repo**.
+
+## Shipping: who actually eats a cap (measured 2026-09-04)
+
+Tovah asked about capping shipping at $15 (as done for Mesa). ⚠️ **On SHIFT a cap comes out of HER
+pocket, not the brand's.** Per the settlement formula above, **C&S fronts production *and* real
+shipping, and the shipping the customer pays passes straight through to C&S** in the application fee.
+The brand keeps retail − owner price either way. Confirm Mesa's money flow before reusing the number.
+
+Live quotes, and what a flat $15 cap would cost her:
+
+| cart | items | subtotal | ship now | % of cart | she eats @ $15 |
+|---|---|---|---|---|---|
+| 1 tee | 1 | $26.99 | $8.50 | 31.5% | — |
+| 3 tees | 3 | $90.97 | $14.50 | 15.9% | — |
+| 2 hoodies + 2 tees | 4 | $181.96 | $17.50 | 9.6% | −$2.50 |
+| Tapstitch haul ×6 | 6 | $195.94 | $27.00 | 13.8% | −$12.00 |
+| mixed: tee + leggings + bag | 3 | $63.97 | $19.00 | **29.7%** | −$4.00 |
+| mixed: 3 FE + 3 TS + 2 PF | 8 | $180.92 | **$36.00** | 19.9% | **−$21.00** |
+| whale: 10 FE | 10 | $454.90 | $35.50 | 7.8% | −$20.50 |
+
+**Big orders are not the problem** — a $455 order pays 7.8% shipping. The ugly cases are *small* (one
+tee = 31.5%) and *mixed* (three items across three suppliers = 29.7%, three parcels, three legs). With
+the catalog split **20 Tapstitch / 10 FE / 3 Printify**, a shopper picking two things they like is more
+likely than not to straddle suppliers. A flat $15 cap spends its money on the whales, which convert
+fine, and does nothing for the single tee that is already under $15.
+
+⚠️ **Precedent**: `2026-07-21` a real $179 order had the app fee land **$1 UNDER the actual supplier
+bill** because the store charged a flat $10 against ~$22 real shipping. That is why shipping went
+per-leg. A flat cap re-creates that failure at 4+ items with a bigger gap. Her net is thin — the
+documented real trio collected $161.47, settled $120.20, and left her **~$12**, so eating $21 on one
+mixed order is roughly five orders of profit.
+
+⚠️ **The Tapstitch rate is calibrated on ONE invoice that shipped the wrong way.** `$4.50/item FLAT,
+no taper` governs **20 of 33 products** and came from a single bill that fulfilled
+**"International — Special Line"** despite the U.S.-fulfillment setting (see Open item 0). And it has
+never been re-checked: **`api/admin/shipping-audit.js` pulls actuals from Fulfill Engine ONLY** — there
+is no Tapstitch equivalent, so the leg that drives the worst big-order shipping is the one nobody
+audits. If U.S. fulfilment works now, the real rate almost certainly tapers and the store is
+**over-charging shipping on 61% of the catalog**. Fix that before considering any cap; it needs no
+policy change. If a cap is still wanted after, **cap per parcel, not per order** — each leg is a real
+bill, and on the carts above a per-leg cap costs $0 on the mixed 3-item cart, the one that needs help.
+
 ## Open items
 
 0. ~~Calibrate the shipping tables~~ **DONE 2026-07-21 from real supplier bills**: FE (3 invoices: 2-item $10.24 / 5-item $16.28 / 7-item $22.26 labels + $0.50/item POD charge) → **$8.50 + $3.00/additional**; Tapstitch (Carly's $179.95 order billed $128.19 incl. **$22.30 shipping on 5 items ≈ $4.46/item FLAT** — that was the "$22 not $10" discovery; published tee rates are fiction) → **$4.50 + $4.50/item**. ⚠️ NEW: that Tapstitch order fulfilled **"International — Special Line", 10–17 days** despite the 07-20 U.S.-fulfillment setting — check in Tapstitch why (products possibly not stocked U.S.); customer is waiting ~2.5 weeks.
@@ -313,11 +472,20 @@ Three organic orders within ~40 min: Michael Sperando $41.99 (#0e39c000), Genaro
 3b. **Fulfill Engine auto-fulfillment WORKING — first real FE order submitted 2026-07-20** ("Sent to Fulfill Engine ✓ … will produce and ship"). The store's FE items are **print-on-demand**, and the ONLY order shape FE accepts for them (learned through three validation errors + the FE-debug probe): item = **`catalogProductId` (the blank, e.g. CT103938) + `designId` (the stored design, e.g. d-72452524) + `productColor`/`productSize`** ('One Size' → omit size) + quantity + declaredValue; **NO order-level campaignId** (account-level POD), **NO sku** (campaign variant SKUs price/display only — FE campaign inventory returns empty for them → InvalidSKU if ordered). Both ids resolve at submit time from the authenticated campaign catalog. Webhook auto-submits future FE orders with this same code; admin has validate-then-submit "Send to Fulfill Engine" + an **FE debug** button (campaign catalog + SKU-validity + prices dump). ~~Still pending: `supabase-fe-order-id.sql`~~ — column added 2026-07-20; the admin can now store/display FE order ids on new submissions.
 4. ~~Snapshot cost/owner-price onto `order_items` at purchase~~ — DONE 2026-07-20 (+ date-range profit CSV).
 5. Optional hardening: pin `PRINTIFY_SHOP_ID=26536230`; Shopify auto-"delivered" needs a fulfillment read scope on the "SHIFT Order Sync" app.
-6. **Collections (2026-08-14)** — ~~migration~~ DONE, ~~backend + admin + page~~ SHIPPED. Left for Tovah:
-   (a) **assign products** to each collection in /dashadmin → Collections (both are empty, so `/collection`
-   shows only empty states); (b) **decide whether `/collection` goes in the header** — the route is live but
-   deliberately unlinked pending her approval; (c) retire the "Summer Collection" **category** once the
-   collection version is populated; (d) the duplicate "OG Heavy Tee" display name.
+6. **Collections** — ~~migration~~ / ~~backend + admin + page~~ / ~~(a) assign products~~ (19 OG + 6 Summer,
+   done by Tovah) / ~~(b) put `/collection` in the header~~ DONE 2026-09-04 `0d44fb7`. Still open:
+   (c) retire the "Summer Collection" **category** now the collection version is populated;
+   (d) ⚠️ **the duplicate "OG Heavy Tee"** — two different blanks (`OG Heavy T` $31.99 and
+   `AS Colour Mens Heavy Tee` $26.99) share that display name and **both sit in the OG Collection**, so
+   they now appear side by side at two prices on a page that is in the nav. Rename one or drop one.
+8. ⚠️ **The Carhartt Beanie sells at cost.** `Carhartt Watch Cap 2.0` (shown as "Carhartt Beanie") is
+   **live, visible and fully in stock with NO retail price set** — and unpriced products sell at cost
+   ($24.25), so every unit sold **loses ~$1.25** after the Stripe fee. Price it or hide it. Found
+   2026-09-04; it is the only unpriced product of the 33.
+9. **Tapstitch shipping actuals** — build the Tapstitch equivalent of "Pull FE actuals" and recalibrate
+   the shopify leg (see the shipping section). Highest-value shipping fix and it needs no policy change.
+10. **Repricing** — the affiliate answer is really a pricing answer (see unit economics above). Decide
+   whether to move the catalog toward $39.99-class pricing before any affiliate/creator programme.
 7. **Newsletter (2026-08-13)** — the dead second form is fixed, but the list is still empty. Worth deciding
    whether the "Join the Movement" copy/placement is doing anything at all, and whether to surface the
    25 real buyer emails in the admin (see the newsletter section above).
