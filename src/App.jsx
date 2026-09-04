@@ -3102,7 +3102,9 @@ function AdminGalleryPage({ adminPassword }) {
     if (targets) return targets;
     const [catRes, colRes, feRes, pfRes, shRes] = await Promise.all([
       fetch('/api/admin/categories'),
-      fetch('/api/admin/collections'),
+      // Signed in, or the hidden (not-yet-live) collections get stripped out of
+      // the list — exactly the ones she's building a photo for.
+      fetch('/api/admin/collections', { headers: { 'x-admin-key': adminPassword } }),
       fetch('/api/products'),
       fetch('/api/printify/products').catch(() => null),
       fetch('/api/shopify/products').catch(() => null),
@@ -3364,7 +3366,7 @@ function AssignPicker({ item, targets, busy, onClose, onPick }) {
           <span className="admin-src-tag">Collections — replaces the collection photo</span>
           {targets.collections.map(c => (
             <button key={c.id} className="gal-target" disabled={busy} onClick={() => onPick({ kind: 'collection', refId: c.id })}>
-              <span>{c.name}</span><em>collection</em>
+              <span>{c.name}</span><em>{c.hidden ? 'collection · hidden' : 'collection'}</em>
             </button>
           ))}
         </div>
