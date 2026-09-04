@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ShoppingBag, Menu, X, ArrowRight, ArrowLeft, Minus, Plus, ChevronRight, ChevronLeft, CheckCircle, Loader, Package, Truck, Eye, LogOut, Lock, Mail, Clock, Search, Download, Upload, Trash2, Tag, RefreshCw, AlertTriangle } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
@@ -587,7 +587,7 @@ const CREATOR_SLIDE = {
   cta: 'View the Mission',
 };
 
-const SPREAD_ROTATE_MS = 7000;
+const SPREAD_ROTATE_MS = 6000;
 
 // Rotates the homepage spread through every live collection, then the creator.
 // Hidden collections never arrive here at all — the public feed strips them
@@ -595,8 +595,12 @@ const SPREAD_ROTATE_MS = 7000;
 function HomeSpread() {
   const [collections, setCollections] = useState([]);
   const [step, setStep] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const reduceMotion = useReducedMotion();
+  // Only two things stop the rotation, and neither is hover: hovering a band
+  // this size (full width, 80vh) means a resting cursor freezes it for most of
+  // a desktop visit, and on touch a tap fires mouseenter with no matching
+  // mouseleave, so it would pause on first tap and never start again.
+  const [held, setHeld] = useState(false);    // keyboard focus is inside it
+  const [taken, setTaken] = useState(false);  // a dot was clicked — visitor is steering
 
   useEffect(() => {
     let alive = true;
@@ -632,18 +636,16 @@ function HomeSpread() {
   const slide = slides[i];
 
   useEffect(() => {
-    if (paused || reduceMotion || slides.length < 2) return;
+    if (held || taken || slides.length < 2) return;
     const id = setInterval(() => setStep(n => n + 1), SPREAD_ROTATE_MS);
     return () => clearInterval(id);
-  }, [paused, reduceMotion, slides.length]);
+  }, [held, taken, slides.length]);
 
   return (
     <section
       className="spread"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocusCapture={() => setPaused(true)}
-      onBlurCapture={() => setPaused(false)}
+      onFocusCapture={() => setHeld(true)}
+      onBlurCapture={() => setHeld(false)}
     >
       <div className="spread-img glitch-img-wrap">
         {/* Every photo stays mounted and stacked; only opacity changes, so the
@@ -686,7 +688,7 @@ function HomeSpread() {
                 className={`spread-dot${n === i ? ' is-on' : ''}`}
                 aria-label={`Show ${s.title}`}
                 aria-current={n === i}
-                onClick={() => setStep(n)}
+                onClick={() => { setStep(n); setTaken(true); }}
               />
             ))}
           </div>
