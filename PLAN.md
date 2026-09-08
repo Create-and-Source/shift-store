@@ -127,6 +127,35 @@ the hidden-products list, so the hidden-product filter correctly drops it out of
 Summer Collection **6**. Every member name-matches its collection. Verified live: public GET returns
 both, POST 401s unauthenticated and with a wrong key, both photos load, all three routes serve.
 
+**Live state 2026-09-08 — THREE collections, all visible, all populated:**
+
+| collection | label | blurb | assigned | renders |
+|---|---|---|---|---|
+| The "OG" Collection | Our Staples | 171 ch | 19 | 18 |
+| Summer Collection | In Season | 212 ch | 6 | 5 |
+| **Fall Collection** | **(none)** | **0 ch** | 12 | 12 |
+
+Catalog is now **45 products, 5 hidden** (was 33 / 17 on 09-04). The OG and Summer shortfalls are the
+hidden-product filter working correctly — a hidden product drops out of every collection too.
+
+⚠️ **THE FALL EPISODE (2026-09-04, resolved 09-08) — read this before debugging an "empty" collection.**
+Tovah launched Fall with a photo and 12 products assigned, and the page still said *"Pieces for this
+collection are on the way."* The assignments were all present and **all 12 resolved to real products in
+the feed** — but **all 12 were on the hidden-products list**, and `itemsFor()` maps assignments through
+`productById` (built from the already-filtered ProductsProvider feed) then `.filter(Boolean)`, so hidden
+members silently vanish and the collection renders as empty. **The collection was never the problem; the
+products were.** Diagnosis that works: resolve each `product_id` against the three feeds AND against
+`hiddenProductIds` from `/api/admin/categories`, and assert the feed is non-empty first or the test is
+vacuous. Fix was Show on those 12 rows in `/dashadmin → Products`. Resolved: Fall now renders 12/12.
+
+⚠️ **Fall still has NO label and NO blurb**, where OG and Summer have both — so its homepage slide and
+its band on `/collection` show a bare title with empty space beside it. See Open items.
+
+⚠️ **The homepage rotator skips a collection with no PHOTO, but not one with no visible PRODUCTS.** For
+the four days Fall was empty, one homepage slide in four sent shoppers to a dead end. If an empty
+collection should stay off the homepage until it has stock, that is a small change to `HomeSpread`'s
+`slides` filter — deliberately not made, since "photo exists" is the author's signal of intent.
+
 **Collections are now LINKED (2026-09-04, `0d44fb7`)** — header, mobile nav and footer, beside
 Categories. ⚠️ Every link points at **`/collection` SINGULAR**. `/collections` plural renders the
 *Categories* board, so linking that instead lands everyone on the wrong page while looking correct;
@@ -478,6 +507,9 @@ bill, and on the carts above a per-leg cap costs $0 on the mixed 3-item cart, th
    (d) ⚠️ **the duplicate "OG Heavy Tee"** — two different blanks (`OG Heavy T` $31.99 and
    `AS Colour Mens Heavy Tee` $26.99) share that display name and **both sit in the OG Collection**, so
    they now appear side by side at two prices on a page that is in the nav. Rename one or drop one.
+7b. **Fall Collection needs a label + blurb** — it is live, populated (12 pieces) and in the homepage
+   rotation, but has neither, so it reads bare next to OG ("Our Staples") and Summer ("In Season").
+   `/dashadmin → Collections → Text & timer`. A countdown is also available if Fall is a timed drop.
 8. ⚠️ **The Carhartt Beanie sells at cost.** `Carhartt Watch Cap 2.0` (shown as "Carhartt Beanie") is
    **live, visible and fully in stock with NO retail price set** — and unpriced products sell at cost
    ($24.25), so every unit sold **loses ~$1.25** after the Stripe fee. Price it or hide it. Found
