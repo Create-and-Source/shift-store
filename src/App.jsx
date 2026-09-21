@@ -123,11 +123,14 @@ function PriceTag({ productId, price, fixed = true }) {
 const STORE_TZ = 'America/Phoenix';
 
 function saleEndsText(endsAt) {
-  return new Date(endsAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: STORE_TZ });
+  // Non-breaking, so a wrapped bar never strands the day on its own line.
+  return new Date(endsAt)
+    .toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: STORE_TZ })
+    .replace(' ', '\u00a0');
 }
 
 function saleMessage(sale) {
-  return sale.message || `${sale.percent}% off the ${sale.collectionName} — ends ${saleEndsText(sale.endsAt)}`;
+  return sale.message || `${sale.percent}% off the ${sale.collectionName} — ends\u00a0${saleEndsText(sale.endsAt)}`;
 }
 
 /* ═══ AUTH CONTEXT ═══ */
@@ -1411,7 +1414,7 @@ function CollectionsPage() {
   // exist once both fetches land, so the browser's own hash jump misses them.
   useEffect(() => {
     if (busy || !hash) return;
-    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
+    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ behavior: 'instant' });
   }, [busy, hash]);
 
   return (

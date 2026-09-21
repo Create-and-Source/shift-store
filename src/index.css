@@ -178,6 +178,10 @@ body { padding-top: var(--announce-h); }
   border-bottom: 1px solid rgba(255,255,255,0.7);
 }
 .announce-bar:hover .announce-bar-cta { border-bottom-color: #fff; }
+@media (max-width: 640px) {
+  .announce-bar { font-size: 10px; letter-spacing: 0.06em; padding: 8px 12px; }
+  .announce-bar-cta { display: none; }   /* the whole bar is the link */
+}
 
 /* Sale prices — full price struck through, sale price in red beside it. */
 .price-was { color: var(--gray); text-decoration: line-through; font-weight: 400; }
@@ -197,7 +201,7 @@ body { padding-top: var(--announce-h); }
 .pdp-sale-tag:hover { border-color: var(--red); }
 
 .collection-sale {
-  display: inline-block;
+  align-self: flex-start;   /* .spread-text is a flex column — don't stretch */
   margin: -8px 0 24px;
   padding: 6px 12px;
   background: var(--red);
@@ -215,7 +219,7 @@ body { padding-top: var(--announce-h); }
   left: 0;
   right: 0;
   z-index: 100;
-  transition: all 0.4s ease;
+  transition: all 0.4s ease, top 0s;
 }
 
 .header.scrolled {
