@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { roleFromReq, getOwnerPrices } from '../_lib/adminRole.js'
 import { getShippingRates, RATE_SOURCES } from '../_lib/shipping.js'
+import { getActiveSale } from '../_lib/sale.js'
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
@@ -54,6 +55,8 @@ export default async function handler(req, res) {
         overrides,
         customProducts: (customRows || []).map(mapCustomProduct),
         shippingRates: await getShippingRates(),
+        // Only a sale that is running right now — null otherwise.
+        sale: await getActiveSale(),
       }
       // The private price layer rides along ONLY for the owner — the public
       // storefront and staff logins never receive it.

@@ -2,6 +2,7 @@ import Stripe from 'stripe'
 import { feEnabled, feAvailability, comboKey } from './_lib/fulfillengine.js'
 import { getOwnerPrices } from './_lib/adminRole.js'
 import { computeCartShipping } from './_lib/shipping.js'
+import { getActiveSale, salePrice } from './_lib/sale.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
@@ -83,6 +84,14 @@ export default async function handler(req, res) {
       console.error('Checkout stock guard skipped (fail-open):', stockErr.message)
     }
 
+    // Collection sale — applied HERE, to the full price the cart sends, so the
+    // sale ends at its end time even for a tab left open past it. Only the
+    // storefront cart opts in (applySale); the admin Order-at-Cost cart posts
+    // cost prices to this same endpoint and must never be discounted.
+    const sale = req.body.applySale ? await getActiveSale() : null
+    const saleIds = new Set(sale?.productIds || [])
+    const discounted = items.some(i => saleIds.has(i.productId))
+
     const lineItems = items.map(item => {
       const productData = { name: item.name }
       const desc = [item.color, item.size].filter(Boolean).join(' / ')
@@ -94,7 +103,9 @@ export default async function handler(req, res) {
         price_data: {
           currency: 'usd',
           product_data: productData,
-          unit_amount: Math.round(item.price * 100),
+          unit_amount: Math.round(
+            (saleIds.has(item.productId) ? salePrice(item.price, sale.percent) : item.price) * 100
+          ),
         },
         quantity: item.qty,
       }
@@ -206,6 +217,7 @@ export default async function handler(req, res) {
       cancel_url: `${origin}/checkout`,
       metadata: {
         store: 'shift',
+        ...(discounted ? { sale: `${sale.slug}:${sale.percent}` } : {}),
         ...itemsMeta,
         ...printifyMeta,
         ...shopifyMeta,

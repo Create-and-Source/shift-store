@@ -143,10 +143,75 @@ img { max-width: 100%; display: block; }
   animation: flicker 8s infinite;
 }
 
+/* ═══ ANNOUNCEMENT BAR ═══
+   Pinned above the header while a sale runs. AnnouncementBar writes its own
+   measured height into --announce-h, so a message that wraps on a phone still
+   pushes the header and the page down by exactly the right amount. */
+:root { --announce-h: 0px; }
+body { padding-top: var(--announce-h); }
+
+.announce-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 101;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 9px 16px;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.4;
+}
+.announce-bar-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.7);
+}
+.announce-bar:hover .announce-bar-cta { border-bottom-color: #fff; }
+
+/* Sale prices — full price struck through, sale price in red beside it. */
+.price-was { color: var(--gray); text-decoration: line-through; font-weight: 400; }
+.price-sale { color: var(--red); font-weight: 700; }
+
+.pdp-sale-tag {
+  display: table;
+  margin-top: 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--red-dim);
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.pdp-sale-tag:hover { border-color: var(--red); }
+
+.collection-sale {
+  display: inline-block;
+  margin: -8px 0 24px;
+  padding: 6px 12px;
+  background: var(--red);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
 /* ═══ HEADER ═══ */
 .header {
   position: fixed;
-  top: 0;
+  top: var(--announce-h);
   left: 0;
   right: 0;
   z-index: 100;
@@ -1141,6 +1206,9 @@ img { max-width: 100%; display: block; }
 /* ═══ COLLECTIONS PAGE (/collection) ═══
    Each collection = a full-width editorial band (reuses .spread) followed by its
    own product grid, so the photo sets the tone and the pieces sit right under it. */
+/* /collection#slug lands below the fixed bar + header, not under them. */
+.collection { scroll-margin-top: calc(var(--announce-h) + 64px); }
+
 .collection + .collection {
   border-top: 1px solid var(--gray-faint);
 }
@@ -3638,6 +3706,7 @@ img { max-width: 100%; display: block; }
 .admin-collection-head { display: flex; align-items: center; gap: 12px; }
 .admin-collection-title strong { font-size: 14px; color: #111; display: block; }
 .tag-timer { color: #b8860b; font-weight: 700; }
+.tag-sale { color: #c00; font-weight: 700; }
 .admin-collection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
 .admin-collection-panel {
   margin-top: 14px; padding-top: 14px; border-top: 1px solid #eee;

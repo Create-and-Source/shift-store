@@ -6,6 +6,7 @@ const supabase = createClient(
 )
 
 import { roleFromReq } from '../_lib/adminRole.js'
+import { getSaleSetting } from '../_lib/sale.js'
 
 function slugify(str = '') {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -50,6 +51,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       collections: visible,
       assignments: (assignments || []).filter(a => ids.has(a.collection_id)),
+      // Admins get the saved sale as-is, even one that has already ended.
+      ...(isAdmin ? { sale: await getSaleSetting() } : {}),
     })
   }
 
@@ -150,6 +153,39 @@ export default async function handler(req, res) {
       const { error } = await supabase.from('collections').update(patch).eq('id', collectionId)
       if (error) return res.status(500).json({ error: error.message })
       return res.status(200).json({ ok: true, countdownEndsAt: ends })
+    }
+
+    // Sale: one at a time, a whole-number % off one collection until endsAt.
+    // Starting a sale on another collection replaces the running one. Both
+    // admin roles may set it — the discount comes out of the brand's cut.
+    if (action === 'setSale') {
+      const { collectionId } = req.body
+      const percent = Number(req.body.percent)
+      if (!collectionId) return res.status(400).json({ error: 'collectionId required' })
+      if (!Number.isInteger(percent) || percent < 1 || percent > 90) {
+        return res.status(400).json({ error: 'Percent off must be a whole number from 1 to 90' })
+      }
+      const ends = new Date(req.body.endsAt)
+      if (isNaN(ends.getTime())) return res.status(400).json({ error: 'Invalid end date/time' })
+      if (ends.getTime() <= Date.now()) return res.status(400).json({ error: 'That end time is in the past' })
+      const message = String(req.body.message || '').trim().slice(0, 120) || null
+
+      const { data: col } = await supabase.from('collections').select('id').eq('id', collectionId).maybeSingle()
+      if (!col) return res.status(404).json({ error: 'Collection not found' })
+
+      const value = { collectionId, percent, endsAt: ends.toISOString(), message }
+      const { error } = await supabase.from('store_settings').upsert(
+        { key: 'sale', value, updated_at: new Date().toISOString() },
+        { onConflict: 'key' }
+      )
+      if (error) return res.status(500).json({ error: error.message })
+      return res.status(200).json({ ok: true, sale: value })
+    }
+
+    if (action === 'endSale') {
+      const { error } = await supabase.from('store_settings').delete().eq('key', 'sale')
+      if (error) return res.status(500).json({ error: error.message })
+      return res.status(200).json({ ok: true, sale: null })
     }
 
     if (action === 'deleteCollection') {

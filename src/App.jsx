@@ -12,6 +12,7 @@ function ProductsProvider({ children }) {
   const [categories, setCategories] = useState([]);
   const [customCategories, setCustomCategories] = useState([]);
   const [stock, setStock] = useState({});
+  const [sale, setSale] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // FE blank-level availability — fetched apart from the product feeds so it
@@ -71,20 +72,63 @@ function ProductsProvider({ children }) {
       allProducts.forEach(p => { p.customCategories = assignMap.get(p.id) || []; });
 
       setProducts(allProducts);
+      setSale(contentData.sale ? { ...contentData.sale, ids: new Set(contentData.sale.productIds || []) } : null);
       setCategories(prodData.categories || []);
       setCustomCategories(catData.categories || []);
     }).catch(err => console.error('Failed to load products:', err))
       .finally(() => setLoading(false));
   }, []);
 
+  // The sale switches itself off at its end time, even on a page left open.
+  useEffect(() => {
+    if (!sale) return;
+    const left = new Date(sale.endsAt).getTime() - Date.now();
+    if (left > 2 ** 31 - 1) return; // beyond setTimeout's range — a reload will catch it
+    const id = setTimeout(() => setSale(null), Math.max(0, left));
+    return () => clearTimeout(id);
+  }, [sale]);
+
+  // % off for a product, or 0 when it isn't on sale.
+  const saleFor = (productId) => (sale?.ids.has(productId) ? sale.percent : 0);
+
   return (
-    <ProductsContext.Provider value={{ products, categories, customCategories, stock, loading }}>
+    <ProductsContext.Provider value={{ products, categories, customCategories, stock, sale, saleFor, loading }}>
       {children}
     </ProductsContext.Provider>
   );
 }
 
 function useProducts() { return useContext(ProductsContext); }
+
+// Integer cents, rounded once — identical to salePrice() in api/_lib/sale.js,
+// which is what Stripe actually charges.
+function salePriceOf(price, percent) {
+  return Math.round(Math.round(Number(price) * 100) * (100 - percent) / 100) / 100;
+}
+
+// A price, struck through with the sale price beside it when the product is on sale.
+function PriceTag({ productId, price, fixed = true }) {
+  const { saleFor } = useProducts();
+  const pct = saleFor(productId);
+  const fmt = n => (fixed ? Number(n).toFixed(2) : n);
+  if (!pct) return <>${fmt(price)}</>;
+  return (
+    <>
+      <s className="price-was">${fmt(price)}</s>{' '}
+      <span className="price-sale">${salePriceOf(price, pct).toFixed(2)}</span>
+    </>
+  );
+}
+
+const STORE_TZ = 'America/Phoenix';
+
+function saleEndsText(endsAt) {
+  return new Date(endsAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: STORE_TZ });
+}
+
+function saleMessage(sale) {
+  return sale.message || `${sale.percent}% off the ${sale.collectionName} — ends ${saleEndsText(sale.endsAt)}`;
+}
 
 /* ═══ AUTH CONTEXT ═══ */
 const AuthContext = createContext();
@@ -126,6 +170,7 @@ const CartContext = createContext();
 
 function CartProvider({ children }) {
   const { user } = useAuth();
+  const { saleFor } = useProducts();
   const [cart, setCart] = useState(() => {
     try { return JSON.parse(localStorage.getItem('shift-cart')) || []; } catch { return []; }
   });
@@ -159,8 +204,14 @@ function CartProvider({ children }) {
 
   const clearCart = () => { setCart([]); localStorage.removeItem('shift-cart'); };
 
+  // i.price stays the full price; a sale is applied on top, here and (for
+  // real) in create-checkout, so it drops off on its own when the sale ends.
+  const unitPrice = (i) => {
+    const pct = saleFor(i.product.id);
+    return pct ? salePriceOf(i.price, pct) : i.price;
+  };
   const cartCount = cart.reduce((sum, i) => sum + i.qty, 0);
-  const cartTotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+  const cartTotal = cart.reduce((sum, i) => sum + unitPrice(i) * i.qty, 0);
 
   const checkout = async () => {
     if (cart.length === 0 || checkingOut) return;
@@ -183,6 +234,7 @@ function CartProvider({ children }) {
             printifyVariantId: i.printifyVariantId || 0,
           })),
           customerEmail: user?.email || '',
+          applySale: true,
         }),
       });
       const data = await res.json();
@@ -258,6 +310,32 @@ function Marquee({ children }) {
         ))}
       </div>
     </div>
+  );
+}
+
+// Red bar pinned above the header while a sale runs. Its measured height goes
+// into --announce-h, which pushes the header and the page down to make room.
+function AnnouncementBar() {
+  const { sale } = useProducts();
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const el = ref.current;
+    if (!sale || !el) return;
+    const measure = () => root.style.setProperty('--announce-h', `${el.offsetHeight}px`);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => { ro.disconnect(); root.style.removeProperty('--announce-h'); };
+  }, [sale]);
+
+  if (!sale) return null;
+  return (
+    <Link ref={ref} to={`/collection#${sale.slug}`} className="announce-bar">
+      <span>{saleMessage(sale)}</span>
+      <span className="announce-bar-cta">Shop <ArrowRight size={12} /></span>
+    </Link>
   );
 }
 
@@ -346,7 +424,7 @@ function CartDrawer() {
                   <div className="cart-item-info">
                     <div className="cart-item-name">{item.product.name}</div>
                     <div className="cart-item-variant">{item.color} / {item.size}</div>
-                    <div className="cart-item-price">${item.price.toFixed(2)}</div>
+                    <div className="cart-item-price"><PriceTag productId={item.product.id} price={item.price} /></div>
                     <div className="cart-qty">
                       <button onClick={() => updateQty(item.key, -1)}><Minus size={12} /></button>
                       <span>{item.qty}</span>
@@ -426,8 +504,10 @@ function Footer() {
 
 function ProductCard({ product, index }) {
   const navigate = useNavigate();
-  const { stock } = useProducts();
+  const { stock, saleFor } = useProducts();
   const out = productSoldOut(stock, product);
+  const pct = saleFor(product.id);
+  const badge = out ? 'Sold Out' : pct ? `${pct}% Off` : product.badge;
   return (
     <motion.div
       className="product-card"
@@ -445,13 +525,13 @@ function ProductCard({ product, index }) {
           loading="lazy"
         />
       </div>
-      {(out || product.badge) && <div className={`product-card-badge${out ? ' soldout' : ''}`}>{out ? 'Sold Out' : product.badge}</div>}
+      {badge && <div className={`product-card-badge${out ? ' soldout' : ''}`}>{badge}</div>}
       <div className="product-card-name">{product.name}</div>
       <div className="product-card-price">
-        {product.comparePrice && (
+        {product.comparePrice && !pct && (
           <span style={{ textDecoration: 'line-through', color: 'var(--gray)', marginRight: 8 }}>${product.comparePrice}</span>
         )}
-        ${product.price}
+        <PriceTag productId={product.id} price={product.price} fixed={false} />
       </div>
     </motion.div>
   );
@@ -475,7 +555,7 @@ function thumb(url, width) {
 function MarqueeRow({ items, reverse, speed }) {
   const trackRef = useRef(null);
   const navigate = useNavigate();
-  const { stock } = useProducts();
+  const { stock, saleFor } = useProducts();
   const st = useRef({ pos: 0, hover: false, dragging: false, moved: false, lastX: 0 });
   const loop = [...items, ...items];
 
@@ -542,15 +622,15 @@ function MarqueeRow({ items, reverse, speed }) {
           >
             <div className="carousel-slide-img glitch-img-wrap">
               <img src={thumb(p.image, 500)} alt={p.name} draggable="false" decoding="async" />
-              {(productSoldOut(stock, p) || p.badge) && (
+              {(productSoldOut(stock, p) || saleFor(p.id) || p.badge) && (
                 <div className={`carousel-badge${productSoldOut(stock, p) ? ' soldout' : ''}`}>
-                  {productSoldOut(stock, p) ? 'Sold Out' : p.badge}
+                  {productSoldOut(stock, p) ? 'Sold Out' : saleFor(p.id) ? `${saleFor(p.id)}% Off` : p.badge}
                 </div>
               )}
             </div>
             <div className="carousel-slide-info">
               <div className="carousel-slide-name">{p.name}</div>
-              <div className="carousel-slide-price">${p.price}</div>
+              <div className="carousel-slide-price"><PriceTag productId={p.id} price={p.price} fixed={false} /></div>
             </div>
           </div>
         ))}
@@ -593,6 +673,7 @@ const SPREAD_ROTATE_MS = 5000;
 // Hidden collections never arrive here at all — the public feed strips them
 // server-side — so hiding one in /dashadmin takes it off the homepage too.
 function HomeSpread() {
+  const { sale } = useProducts();
   const [collections, setCollections] = useState([]);
   const [step, setStep] = useState(0);
   // Only two things stop the rotation, and neither is hover: hovering a band
@@ -617,18 +698,18 @@ function HomeSpread() {
       key: c.id,
       image: c.image_url,
       alt: `SHIFT ${c.name}`,
-      label: c.label,
+      ...(sale?.collectionId === c.id && !c.countdown_ends_at
+        ? { label: `${sale.percent}% Off · Sale`, endsAt: sale.endsAt, countdownLabel: 'Sale ends in' }
+        : { label: c.label, endsAt: c.countdown_ends_at, countdownLabel: c.countdown_label }),
       title: c.name,
       body: c.blurb,
-      endsAt: c.countdown_ends_at,
-      countdownLabel: c.countdown_label,
       // Each band on /collection carries id={slug}, so this lands on the
       // collection itself rather than the top of the page.
       to: `/collection#${c.slug}`,
       cta: 'Shop the Collection',
     })),
     CREATOR_SLIDE,
-  ], [collections]);
+  ], [collections, sale]);
 
   // The slides arrive after first paint, so the index is read modulo the current
   // length — otherwise it points past the end the moment the fetch lands.
@@ -1011,7 +1092,7 @@ const productSoldOut = (stock, product) =>
 
 function ProductPage() {
   const { id } = useParams();
-  const { products, stock, loading } = useProducts();
+  const { products, stock, sale, loading } = useProducts();
   const product = products.find(p => p.id === id);
   const [selectedColor, setSelectedColor] = useState(0);
   const [selectedSize, setSelectedSize] = useState(null);
@@ -1089,7 +1170,14 @@ function ProductPage() {
           </div>
 
           <h1 className="pdp-name">{product.name}</h1>
-          <div className="pdp-price">${totalPrice.toFixed(2)}</div>
+          <div className="pdp-price">
+            <PriceTag productId={product.id} price={totalPrice} />
+            {sale?.ids.has(product.id) && (
+              <Link to={`/collection#${sale.slug}`} className="pdp-sale-tag">
+                {sale.percent}% off · {sale.collectionName} · ends {saleEndsText(sale.endsAt)}
+              </Link>
+            )}
+          </div>
           {(() => {
             const parts = (product.description || '').split(/\s*[-•]\s+/).map(s => s.trim()).filter(Boolean);
             if (parts.length <= 1) return <p className="pdp-desc">{product.description}</p>;
@@ -1292,7 +1380,8 @@ function CollectionCountdown({ endsAt, label }) {
 }
 
 function CollectionsPage() {
-  const { products, loading } = useProducts();
+  const { products, sale, loading } = useProducts();
+  const { hash } = useLocation();
   const [collections, setCollections] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [loadingCols, setLoadingCols] = useState(true);
@@ -1317,6 +1406,13 @@ function CollectionsPage() {
     .filter(Boolean);
 
   const busy = loading || loadingCols;
+
+  // /collection#summer (announcement bar, homepage spread) — the sections only
+  // exist once both fetches land, so the browser's own hash jump misses them.
+  useEffect(() => {
+    if (busy || !hash) return;
+    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
+  }, [busy, hash]);
 
   return (
     <>
@@ -1357,8 +1453,13 @@ function CollectionsPage() {
                 >
                   {c.label && <div className="spread-label">{c.label}</div>}
                   <h2 className="spread-title"><GlitchText>{c.name}</GlitchText></h2>
+                  {sale?.collectionId === c.id && (
+                    <div className="collection-sale">{sale.percent}% off the whole collection</div>
+                  )}
                   {c.blurb && <p className="spread-body">{c.blurb}</p>}
-                  <CollectionCountdown endsAt={c.countdown_ends_at} label={c.countdown_label} />
+                  {sale?.collectionId === c.id && !c.countdown_ends_at
+                    ? <CollectionCountdown endsAt={sale.endsAt} label="Sale ends in" />
+                    : <CollectionCountdown endsAt={c.countdown_ends_at} label={c.countdown_label} />}
                   {items.length > 0 && (
                     <div className="collection-count">
                       {items.length} {items.length === 1 ? 'piece' : 'pieces'}
@@ -1566,7 +1667,7 @@ function CheckoutPage() {
                   <div className="ck-item-info">
                     <div className="ck-item-name">{item.product.name}</div>
                     <div className="ck-item-variant">{item.color} / {item.size}</div>
-                    <div className="ck-item-price">${item.price.toFixed(2)}</div>
+                    <div className="ck-item-price"><PriceTag productId={item.product.id} price={item.price} /></div>
                     <div className="ck-item-actions">
                       <div className="cart-qty">
                         <button onClick={() => updateQty(item.key, -1)}><Minus size={12} /></button>
@@ -1640,7 +1741,7 @@ function CheckoutPage() {
                 <div key={p.id} className="ck-suggestion" onClick={() => navigate(`/product/${p.id}`)}>
                   <img src={p.image} alt={p.name} />
                   <div className="ck-suggestion-name">{p.name}</div>
-                  <div className="ck-suggestion-price">${p.price.toFixed(2)}</div>
+                  <div className="ck-suggestion-price"><PriceTag productId={p.id} price={p.price} /></div>
                 </div>
               ))}
             </div>
@@ -2450,6 +2551,7 @@ function AdminCollectionsPage({ adminPassword }) {
   const [openPanel, setOpenPanel] = useState({}); // collectionId -> 'details' | 'products'
   const [drafts, setDrafts] = useState({});       // collectionId -> edited fields
   const [prodSearch, setProdSearch] = useState('');
+  const [saleSetting, setSaleSetting] = useState(null); // store_settings 'sale', even if ended
 
   const load = async () => {
     setLoading(true);
@@ -2469,6 +2571,7 @@ function AdminCollectionsPage({ adminPassword }) {
       setCollections(colData.collections || []);
       setAssignments(colData.assignments || []);
       setSetupNeeded(!!colData.setupNeeded);
+      setSaleSetting(colData.sale || null);
       setOverrides(content.overrides || {});
       setFeedProducts([...(prodData.products || []), ...(pfData.products || []), ...(shData.products || [])]);
       setLoadedAt(Date.now());
@@ -2558,6 +2661,35 @@ function AdminCollectionsPage({ adminPassword }) {
     await load();
   });
 
+  const startSale = (c) => withBusy('Starting sale…', async () => {
+    const d = drafts[c.id] || {};
+    const mine = saleSetting?.collectionId === c.id ? saleSetting : null;
+    const percent = Number(d.salePct ?? mine?.percent ?? '');
+    if (!Number.isInteger(percent) || percent < 1 || percent > 90) { setStatusMsg('Percent off: a whole number from 1 to 90.'); return; }
+    const local = d.saleEnds ?? toLocalInput(mine?.endsAt);
+    if (!local) { setStatusMsg('Pick when the sale ends.'); return; }
+    const when = new Date(local);
+    if (isNaN(when.getTime()) || when.getTime() <= Date.now()) { setStatusMsg('Pick an end time in the future.'); return; }
+    const other = saleSetting && saleSetting.collectionId !== c.id && new Date(saleSetting.endsAt).getTime() > Date.now()
+      ? collections.find(x => x.id === saleSetting.collectionId) : null;
+    if (other && !window.confirm(`End the ${other.name} sale and start this one?`)) { setStatusMsg(''); return; }
+    await post({
+      action: 'setSale',
+      collectionId: c.id,
+      percent,
+      endsAt: when.toISOString(),
+      message: d.saleMsg ?? (mine?.message || ''),
+    });
+    setStatusMsg(`Sale live ✓ ${percent}% off ${c.name}`);
+    await load();
+  });
+
+  const endSale = () => withBusy('Ending sale…', async () => {
+    await post({ action: 'endSale' });
+    setStatusMsg('Sale ended ✓');
+    await load();
+  });
+
   const remove = (c) => {
     if (!window.confirm(`Delete the collection “${c.name}”? The products themselves are not touched.`)) return;
     withBusy('Deleting…', async () => {
@@ -2622,6 +2754,8 @@ function AdminCollectionsPage({ adminPassword }) {
           const setDraft = patch => setDrafts(prev => ({ ...prev, [c.id]: { ...prev[c.id], ...patch } }));
           const panel = openPanel[c.id];
           const timerLive = c.countdown_ends_at && new Date(c.countdown_ends_at).getTime() > loadedAt;
+          const saleHere = saleSetting?.collectionId === c.id ? saleSetting : null;
+          const saleLive = saleHere && new Date(saleHere.endsAt).getTime() > loadedAt;
 
           return (
             <div key={c.id} className={`admin-collection-card ${c.hidden ? 'is-hidden' : ''}`}>
@@ -2635,6 +2769,7 @@ function AdminCollectionsPage({ adminPassword }) {
                     {inSet.size} {inSet.size === 1 ? 'piece' : 'pieces'}
                     {c.hidden && <span className="tag-hidden"> · Hidden</span>}
                     {timerLive && <span className="tag-timer"> · Timer ends {new Date(c.countdown_ends_at).toLocaleString()}</span>}
+                    {saleLive && <span className="tag-sale"> · {saleHere.percent}% off until {new Date(saleHere.endsAt).toLocaleString()}</span>}
                   </div>
                 </div>
               </div>
@@ -2653,6 +2788,12 @@ function AdminCollectionsPage({ adminPassword }) {
                   onClick={() => setOpenPanel(p => ({ ...p, [c.id]: panel === 'details' ? null : 'details' }))}
                 >
                   Text &amp; timer
+                </button>
+                <button
+                  className="admin-cat-hide-btn"
+                  onClick={() => setOpenPanel(p => ({ ...p, [c.id]: panel === 'sale' ? null : 'sale' }))}
+                >
+                  {saleLive ? `Sale (${saleHere.percent}% off)` : 'Sale'}
                 </button>
                 <button
                   className="admin-cat-hide-btn"
@@ -2714,6 +2855,47 @@ function AdminCollectionsPage({ adminPassword }) {
                         <button disabled={busy} onClick={() => stopCountdown(c)}>Stop timer</button>
                       )}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {panel === 'sale' && (
+                <div className="admin-collection-panel">
+                  <label>Percent off
+                    <input
+                      type="number"
+                      min="1"
+                      max="90"
+                      step="1"
+                      placeholder="e.g. 20"
+                      value={d.salePct ?? (saleHere?.percent ?? '')}
+                      onChange={e => setDraft({ salePct: e.target.value })}
+                    />
+                  </label>
+                  <label>Sale ends
+                    <input
+                      type="datetime-local"
+                      value={d.saleEnds ?? toLocalInput(saleHere?.endsAt)}
+                      onChange={e => setDraft({ saleEnds: e.target.value })}
+                    />
+                  </label>
+                  <label>Announcement bar
+                    <input
+                      maxLength={120}
+                      placeholder={(() => {
+                        const pct = Number(d.salePct ?? saleHere?.percent) || 20;
+                        const ends = d.saleEnds ?? toLocalInput(saleHere?.endsAt);
+                        return `${pct}% off the ${c.name}${ends ? ` — ends ${new Date(ends).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}`;
+                      })()}
+                      value={d.saleMsg ?? (saleHere?.message || '')}
+                      onChange={e => setDraft({ saleMsg: e.target.value })}
+                    />
+                  </label>
+                  <div className="admin-desc-actions">
+                    <button className="admin-desc-save" disabled={busy} onClick={() => startSale(c)}>
+                      {saleLive ? 'Update sale' : 'Start sale'}
+                    </button>
+                    {saleHere && <button disabled={busy} onClick={endSale}>End sale now</button>}
                   </div>
                 </div>
               )}
@@ -5051,6 +5233,7 @@ export default function App() {
         <ProductsProvider>
           <CartProvider>
             <ScrollToTop />
+            <AnnouncementBar />
             <Header />
             <CartDrawer />
             <Routes>
