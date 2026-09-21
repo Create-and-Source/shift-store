@@ -170,6 +170,33 @@ sweep in ~18 unrelated products, which is exactly why membership is explicit tic
 ⚠️ **Two different products both display as "OG Heavy Tee"** (the real OG Heavy T and the renamed
 AS Colour Mens Heavy Tee) — they read as duplicates anywhere they appear together.
 
+## Collection sale + announcement bar (2026-09-20, `b396547` + `57a0c65`)
+
+The ask (client, by text): "anything in the summer collection already 20% off" through the end of
+the month, no code, plus an announcement bar.
+
+- **Setting**: `store_settings` key `sale` = `{ collectionId, percent, endsAt, message }`. One sale at
+  a time. Set/ended at **/dashadmin → Collections → (collection) → Sale** — both roles. No migration.
+- **Active** = percent 1–90, `endsAt` in the future, collection exists and is NOT hidden
+  (`api/_lib/sale.js` `getActiveSale`). Anything else, including a read error = no sale = full price.
+- **Server-authoritative**: the cart keeps the FULL price in `i.price`; `create-checkout` applies
+  `salePrice()` to sale-collection items, so the sale ends on time even in a tab left open. Only the
+  storefront cart sends `applySale: true` — the admin **Order-at-Cost cart posts cost prices to the
+  same endpoint and must never be discounted**. Session metadata gets `sale: summer:20`.
+- Storefront reads the active sale from the public `GET /api/admin/content` (`sale`), and switches
+  itself off at `endsAt` with a timer. `salePriceOf()` (App.jsx) and `salePrice()` (sale.js) are the
+  same integer-cents formula; keep them identical.
+- UI: struck price + red sale price (cards, carousel, PDP, cart, checkout, suggestions), "20% Off"
+  badge, red bar pinned above the header (its measured height → `--announce-h`, which offsets the
+  header and `body`), "20% off the whole collection" strip + "Sale ends in" countdown on the
+  collection and the homepage spread (only when the collection has no countdown of its own).
+  `/collection#slug` now actually lands on the section.
+- **Who pays**: the Connect app fee (owner price + shipping) is unchanged, so the discount is 100%
+  out of the brand's cut. Summer at 20% off, brand's cut before Stripe fees: Crewneck $5.25,
+  Coastal Tee $9.21, Pink Baby Tee $7.01, Polo **$2.43**, Off-Shoulder Crop **$2.41**
+  (Blues Crewneck is hidden). All positive — but a deeper % on the Polo/Crop goes negative.
+- End date/time shown in `America/Phoenix` (`STORE_TZ`); in September that equals Pacific.
+
 ## Homepage spread rotator (2026-09-04, `8d60094` + `7fcbe93` + `553d461`)
 
 The homepage `.spread` slot held one hardcoded Summer Collection block. It now **rotates through every
