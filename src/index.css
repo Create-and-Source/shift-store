@@ -178,9 +178,10 @@ body { padding-top: var(--announce-h); }
   border-bottom: 1px solid rgba(255,255,255,0.7);
 }
 .announce-bar:hover .announce-bar-cta { border-bottom-color: #fff; }
+/* Phone: message on one line, "Shop →" on its own line beneath it. */
 @media (max-width: 640px) {
-  .announce-bar { font-size: 10px; letter-spacing: 0.06em; padding: 8px 12px; }
-  .announce-bar-cta { display: none; }   /* the whole bar is the link */
+  .announce-bar { flex-direction: column; gap: 3px; font-size: 10px; letter-spacing: 0.06em; padding: 7px 12px 8px; }
+  .announce-bar-cta { font-size: 10px; letter-spacing: 0.14em; padding-bottom: 1px; }
 }
 
 /* Sale prices — full price struck through, sale price in red beside it. */
