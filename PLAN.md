@@ -196,6 +196,14 @@ the month, no code, plus an announcement bar.
   Coastal Tee $9.21, Pink Baby Tee $7.01, Polo **$2.43**, Off-Shoulder Crop **$2.41**
   (Blues Crewneck is hidden). All positive — but a deeper % on the Polo/Crop goes negative.
 - End date/time shown in `America/Phoenix` (`STORE_TZ`); in September that equals Pacific.
+- **Launched 2026-09-20 ~7:45 PM** — Tovah clicked Start sale (Claude could not write the setting:
+  the Supabase SQL-editor write was blocked, so the admin button is the only switch). **Live-verified**:
+  bar + struck prices on shiftapparelco.com, OG untouched, and an unpaid live Stripe session charged
+  **$19.19** (+ $4.50 shipping) for the $23.99 Coastal Tee. Saved end first came out **11:59 AM**
+  (datetime-local AM/PM slip) — corrected to `2026-10-01T06:59Z` = **Sep 30, 11:59 PM AZ**. When
+  setting a sale, read the card's "N% off until …" line back before walking away.
+- Phone bar (`ec87606`): message one line, **"Shop →" on its own line beneath** (48px at 375/430).
+  Hiding the CTA to save height read as "the Shop button is cut off".
 
 ## Homepage spread rotator (2026-09-04, `8d60094` + `7fcbe93` + `553d461`)
 
@@ -545,6 +553,14 @@ bill, and on the carts above a per-leg cap costs $0 on the mixed 3-item cart, th
    the shopify leg (see the shipping section). Highest-value shipping fix and it needs no policy change.
 10. **Repricing** — the affiliate answer is really a pricing answer (see unit economics above). Decide
    whether to move the catalog toward $39.99-class pricing before any affiliate/creator programme.
+11. **Summer sale ends Sep 30, 11:59 PM AZ on its own** — bar, prices and countdown drop off, checkout
+   reverts to full price. Nothing to take down; the row can stay (an ended sale is inert) or be cleared
+   with "End sale now". Worth a look on Oct 1 that the bar is gone.
+12. ⚠️ **Checkout trusts the item price the browser sends** (`create-checkout` uses `item.price` from
+   the request; only shipping and the sale are computed server-side). Anyone who edits the request can
+   pay any price. Pre-existing, not caused by the sale — fix by looking the retail price up server-side
+   (feeds + `product_overrides` + size surcharge), keeping the Order-at-Cost cart's cost pricing
+   admin-key-gated.
 7. **Newsletter (2026-08-13)** — the dead second form is fixed, but the list is still empty. Worth deciding
    whether the "Join the Movement" copy/placement is doing anything at all, and whether to surface the
    25 real buyer emails in the admin (see the newsletter section above).
