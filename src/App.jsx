@@ -963,18 +963,55 @@ function ShopPage() {
   const [searchParams] = useSearchParams();
   const [activeFilter, setActiveFilter] = useState('all');
 
-  // Preselect a category when arriving from a homepage tile (?category=Name).
+  // Live collections sort the shop too, right alongside the categories. The
+  // public GET already strips hidden collections, so whatever lands here is
+  // live by definition.
+  const [collections, setCollections] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/admin/collections')
+      .then(r => r.json())
+      .then(d => {
+        if (!alive) return;
+        setCollections(d.collections || []);
+        setAssignments(d.assignments || []);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Preselect a category when arriving from a homepage tile (?category=Name),
+  // or a collection with ?collection=<slug>.
   useEffect(() => {
     const cat = searchParams.get('category');
     if (cat) setActiveFilter(cat);
   }, [searchParams]);
+  useEffect(() => {
+    const slug = searchParams.get('collection');
+    if (!slug) return;
+    const c = collections.find(c => c.slug === slug || String(c.id) === slug);
+    if (c) setActiveFilter(`col:${c.id}`);
+  }, [searchParams, collections]);
 
   // Use custom categories if available, fall back to FE categories
   const hasCustom = customCategories.length > 0;
+  // A collection only earns a tile once something visible is actually in it —
+  // an empty one would filter down to a blank grid.
+  const assignedIds = new Map();
+  for (const a of assignments) {
+    const k = String(a.collection_id);
+    if (!assignedIds.has(k)) assignedIds.set(k, []);
+    assignedIds.get(k).push(a.product_id);
+  }
+  const productIds = new Set(products.map(p => p.id));
+  const collectionFilters = collections
+    .filter(c => (assignedIds.get(String(c.id)) || []).some(id => productIds.has(id)))
+    .map(c => ({ id: `col:${c.id}`, name: c.name, image_url: c.image_url }));
   const filters = hasCustom
-    ? [{ id: 'all', name: 'All' }, ...customCategories.map(c => ({ id: c.name, name: c.name, image_url: c.image_url }))]
-    : [{ id: 'all', name: 'All' }, ...categories.map(c => ({ id: c.id || c.name, name: c.name }))];
-  const usePhotoTiles = hasCustom && customCategories.some(c => c.image_url);
+    ? [{ id: 'all', name: 'All' }, ...customCategories.map(c => ({ id: c.name, name: c.name, image_url: c.image_url })), ...collectionFilters]
+    : [{ id: 'all', name: 'All' }, ...categories.map(c => ({ id: c.id || c.name, name: c.name })), ...collectionFilters];
+  const usePhotoTiles = (hasCustom && customCategories.some(c => c.image_url)) || collectionFilters.some(c => c.image_url);
 
   // Spread the "All" grid so same-category items aren't clustered together
   // (e.g. not 3 hats in a row). Deterministic round-robin: deal one product
@@ -1000,9 +1037,14 @@ function ShopPage() {
 
   const filtered = activeFilter === 'all'
     ? spreadProducts(products)
-    : hasCustom
-      ? products.filter(p => (p.customCategories || []).includes(activeFilter))
-      : products.filter(p => p.category === activeFilter);
+    : activeFilter.startsWith('col:')
+      // Collection order is the order the admin set, not the feed's.
+      ? (assignedIds.get(activeFilter.slice(4)) || [])
+          .map(id => products.find(p => p.id === id))
+          .filter(Boolean)
+      : hasCustom
+        ? products.filter(p => (p.customCategories || []).includes(activeFilter))
+        : products.filter(p => p.category === activeFilter);
 
   return (
     <>
