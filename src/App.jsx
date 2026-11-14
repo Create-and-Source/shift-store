@@ -667,6 +667,26 @@ const CREATOR_SLIDE = {
   cta: 'View the Mission',
 };
 
+// Winter leads the homepage spread and plays a video where the other slides
+// show a photo. If a live Winter collection comes back from the feed, that one
+// takes the video and the lead slot, so the collection and the slide can never
+// double up; until one exists, this stands in on its own.
+const WINTER_VIDEO = '/videos/shift-winter.mp4';
+const isWinter = c => /winter/i.test(c?.slug || '') || /winter/i.test(c?.name || '');
+const WINTER_SLIDE = {
+  key: 'winter',
+  video: WINTER_VIDEO,
+  alt: 'SHIFT Winter Collection',
+  label: 'New Season',
+  title: 'Winter Collection',
+  // No Winter collection exists in /dashadmin yet, so the stand-in sends
+  // people to the shop rather than to an anchor with no band behind it. The
+  // moment a live Winter collection appears, the slide below replaces this
+  // one and links to the collection itself.
+  to: '/shop',
+  cta: 'Shop the Collection',
+};
+
 const SPREAD_ROTATE_MS = 5000;
 
 // Rotates the homepage spread through every live collection, then the creator.
@@ -692,11 +712,13 @@ function HomeSpread() {
     return () => { alive = false; };
   }, []);
 
-  const slides = useMemo(() => [
-    // A collection with no photo would render an empty half, so it sits this out.
-    ...collections.filter(c => c.image_url).map(c => ({
+  const slides = useMemo(() => {
+    // A collection with no photo would render an empty half, so it sits this
+    // out — unless it is Winter, which carries its own video instead.
+    const colSlides = collections.filter(c => c.image_url || isWinter(c)).map(c => ({
       key: c.id,
       image: c.image_url,
+      ...(isWinter(c) ? { video: WINTER_VIDEO } : {}),
       alt: `SHIFT ${c.name}`,
       ...(sale?.collectionId === c.id && !c.countdown_ends_at
         ? { label: `${sale.percent}% Off · Sale`, endsAt: sale.endsAt, countdownLabel: 'Sale ends in' }
@@ -707,9 +729,17 @@ function HomeSpread() {
       // collection itself rather than the top of the page.
       to: `/collection#${c.slug}`,
       cta: 'Shop the Collection',
-    })),
-    CREATOR_SLIDE,
-  ], [collections, sale]);
+    }));
+    const winter = colSlides.filter(s => s.video);
+    const rest = colSlides.filter(s => !s.video);
+    return [
+      // Winter first, every time — the real collection when there is one, the
+      // stand-in when there is not.
+      ...(winter.length ? winter : [WINTER_SLIDE]),
+      ...rest,
+      CREATOR_SLIDE,
+    ];
+  }, [collections, sale]);
 
   // The slides arrive after first paint, so the index is read modulo the current
   // length — otherwise it points past the end the moment the fetch lands.
@@ -734,15 +764,27 @@ function HomeSpread() {
             A JS-driven fade stalls outright in a background tab (rAF stops
             ticking) and can leave the panel showing the wrong slide, or none. */}
         {slides.map((s, n) => (
-          <img
-            key={s.key}
-            className={`spread-photo${n === i ? ' is-on' : ''}`}
-            src={thumb(s.image, 1400)}
-            alt={n === i ? s.alt : ''}
-            aria-hidden={n !== i}
-            loading="lazy"
-            style={{ objectPosition: 'center 30%' }}
-          />
+          s.video ? (
+            <video
+              key={s.key}
+              className={`spread-photo${n === i ? ' is-on' : ''}`}
+              src={s.video}
+              poster={s.image ? thumb(s.image, 1400) : undefined}
+              autoPlay muted loop playsInline
+              aria-hidden={n !== i}
+              style={{ objectPosition: 'center 30%' }}
+            />
+          ) : (
+            <img
+              key={s.key}
+              className={`spread-photo${n === i ? ' is-on' : ''}`}
+              src={thumb(s.image, 1400)}
+              alt={n === i ? s.alt : ''}
+              aria-hidden={n !== i}
+              loading="lazy"
+              style={{ objectPosition: 'center 30%' }}
+            />
+          )
         ))}
       </div>
 
@@ -784,6 +826,11 @@ function HomePage() {
   const featured = products.slice(0, 16);
   const categoryTiles = (customCategories || []).filter(c => c.image_url);
   const [heroLoaded, setHeroLoaded] = useState(false);
+  // Read once, at mount: swapping the src mid-visit would restart the video.
+  const [heroSrc] = useState(() =>
+    (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches)
+      ? '/videos/shift-hero-fall-winter-540.mp4'
+      : '/videos/shift-hero-fall-winter-720.mp4');
 
   return (
     <>
@@ -794,8 +841,11 @@ function HomePage() {
       <section className="hero">
         <div className="hero-media">
           <img src="/lifestyle/street-crossing.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          {/* Phones get the 540p cut, desktops the sharper 720p one. Same clip,
+              same length either way — the phone just pulls 7.3MB instead of
+              11.4MB, which is most of the wait on a cell network. */}
           <video
-            src="/videos/shift-hero.mp4"
+            src={heroSrc}
             autoPlay muted loop playsInline
             onLoadedData={() => setHeroLoaded(true)}
             style={{ position: 'absolute', inset: 0, opacity: heroLoaded ? 1 : 0, width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 1s' }}

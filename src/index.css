@@ -351,6 +351,10 @@ body { padding-top: var(--announce-h); }
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* The hero box is far wider than 16:9, so cover crops ~20% of the frame's
+     height. Centering that crop took the tops of heads off; anchoring it to
+     the top keeps every face and spends the crop on the sidewalk instead. */
+  object-position: center top;
 }
 
 .hero-gradient {
@@ -520,14 +524,16 @@ body { padding-top: var(--announce-h); }
   overflow: hidden;
 }
 
-.spread-img img {
+.spread-img img,
+.spread-img video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   transition: transform 6s ease;
 }
 
-.spread-img:hover img { transform: scale(1.03); }
+.spread-img:hover img,
+.spread-img:hover video { transform: scale(1.03); }
 
 /* Rotating spread: the photos stack so one can fade in over the other. Without
    this they would replace each other and blink the panel empty mid-swap. */
