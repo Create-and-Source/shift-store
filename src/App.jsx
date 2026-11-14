@@ -667,25 +667,12 @@ const CREATOR_SLIDE = {
   cta: 'View the Mission',
 };
 
-// Winter leads the homepage spread and plays a video where the other slides
-// show a photo. If a live Winter collection comes back from the feed, that one
-// takes the video and the lead slot, so the collection and the slide can never
-// double up; until one exists, this stands in on its own.
-const WINTER_VIDEO = '/videos/shift-winter.mp4';
-const isWinter = c => /winter/i.test(c?.slug || '') || /winter/i.test(c?.name || '');
-const WINTER_SLIDE = {
-  key: 'winter',
-  video: WINTER_VIDEO,
-  alt: 'SHIFT Winter Collection',
-  label: 'New Season',
-  title: 'Winter Collection',
-  // No Winter collection exists in /dashadmin yet, so the stand-in sends
-  // people to the shop rather than to an anchor with no band behind it. The
-  // moment a live Winter collection appears, the slide below replaces this
-  // one and links to the collection itself.
-  to: '/shop',
-  cta: 'Shop the Collection',
-};
+// The season's collection leads the homepage spread and plays a video where
+// the other slides show a photo. It is matched by name off the live feed, so
+// renaming it in /dashadmin (Winter, Holiday) keeps the video with it, and
+// there is no hardcoded stand-in to double up with the real collection.
+const SEASON_VIDEO = '/videos/shift-winter.mp4';
+const isSeasonLead = c => /holiday|winter/i.test(`${c?.slug || ''} ${c?.name || ''}`);
 
 const SPREAD_ROTATE_MS = 5000;
 
@@ -714,11 +701,11 @@ function HomeSpread() {
 
   const slides = useMemo(() => {
     // A collection with no photo would render an empty half, so it sits this
-    // out — unless it is Winter, which carries its own video instead.
-    const colSlides = collections.filter(c => c.image_url || isWinter(c)).map(c => ({
+    // out — unless it is the season lead, which carries its own video.
+    const colSlides = collections.filter(c => c.image_url || isSeasonLead(c)).map(c => ({
       key: c.id,
       image: c.image_url,
-      ...(isWinter(c) ? { video: WINTER_VIDEO } : {}),
+      ...(isSeasonLead(c) ? { video: SEASON_VIDEO } : {}),
       alt: `SHIFT ${c.name}`,
       ...(sale?.collectionId === c.id && !c.countdown_ends_at
         ? { label: `${sale.percent}% Off · Sale`, endsAt: sale.endsAt, countdownLabel: 'Sale ends in' }
@@ -730,13 +717,11 @@ function HomeSpread() {
       to: `/collection#${c.slug}`,
       cta: 'Shop the Collection',
     }));
-    const winter = colSlides.filter(s => s.video);
-    const rest = colSlides.filter(s => !s.video);
+    // The season's collection first, every time; the rest keep the order
+    // /dashadmin gave them.
     return [
-      // Winter first, every time — the real collection when there is one, the
-      // stand-in when there is not.
-      ...(winter.length ? winter : [WINTER_SLIDE]),
-      ...rest,
+      ...colSlides.filter(s => s.video),
+      ...colSlides.filter(s => !s.video),
       CREATOR_SLIDE,
     ];
   }, [collections, sale]);
