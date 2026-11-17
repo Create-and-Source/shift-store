@@ -3832,6 +3832,331 @@ function AssignPicker({ item, targets, busy, onClose, onPick }) {
   );
 }
 
+/* ═══ ADMIN TO DOS — the shared list between the two logins ═══ */
+
+// owner = Tovah, staff = Jenna. One login writes the to do and the how to,
+// the other does it and attaches the results back onto the same card.
+const WHO_NAME = { owner: 'Tovah', staff: 'Jenna', both: 'Both of us' };
+const whoName = k => WHO_NAME[k] || k;
+
+const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif)(\?|$)/i;
+const VIDEO_RE = /\.(mp4|mov|webm|m4v)(\?|$)/i;
+
+const todoDate = iso => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+function TodoAttachment({ a, canRemove, onRemove }) {
+  const isImage = IMAGE_RE.test(a.url);
+  const isVideo = VIDEO_RE.test(a.url);
+  return (
+    <div className="todo-att">
+      <a href={a.url} target="_blank" rel="noreferrer" className="todo-att-media">
+        {isImage
+          ? <img src={a.url} alt={a.caption || 'attachment'} loading="lazy" />
+          : isVideo
+            ? <video src={a.url} muted playsInline preload="metadata" />
+            : <span className="todo-att-link">Open link</span>}
+      </a>
+      <div className="todo-att-foot">
+        <span title={a.caption || ''}>{a.caption || (isVideo ? 'Video' : isImage ? 'Screenshot' : 'Link')}</span>
+        <em>{whoName(a.added_by)}</em>
+        {canRemove && <button className="admin-link-btn" onClick={() => onRemove(a.id)}>Remove</button>}
+      </div>
+    </div>
+  );
+}
+
+function AdminTodosPage({ adminPassword, role }) {
+  const [todos, setTodos] = useState([]);
+  const [attachments, setAttachments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
+  const [setupNeeded, setSetupNeeded] = useState(false);
+  const [filter, setFilter] = useState('open');     // open | done | all
+  const [composing, setComposing] = useState(false);
+  const [draftNew, setDraftNew] = useState({ title: '', body: '', assignedTo: '', dueDate: '' });
+  const [edits, setEdits] = useState({});           // todoId -> edited fields
+  const [openBody, setOpenBody] = useState({});     // todoId -> true when the how to is expanded
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/todos', { headers: { 'x-admin-key': adminPassword } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load');
+      setTodos(data.todos || []);
+      setAttachments(data.attachments || []);
+      setSetupNeeded(!!data.setupNeeded);
+    } catch (e) { setStatusMsg(e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const post = async (body) => {
+    const res = await fetch('/api/admin/todos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminPassword },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+    return data;
+  };
+
+  const withBusy = async (label, fn) => {
+    setBusy(true); setStatusMsg(label);
+    try { await fn(); }
+    catch (e) { setStatusMsg(e.message); setBusy(false); return; }
+    setBusy(false);
+  };
+
+  const create = () => withBusy('Adding…', async () => {
+    if (!draftNew.title.trim()) { setStatusMsg('Give it a title first.'); return; }
+    await post({ action: 'create', ...draftNew, assignedTo: draftNew.assignedTo || undefined });
+    setDraftNew({ title: '', body: '', assignedTo: '', dueDate: '' });
+    setComposing(false);
+    setStatusMsg('Added ✓');
+    await load();
+  });
+
+  const save = (t) => withBusy('Saving…', async () => {
+    await post({ action: 'update', id: t.id, ...edits[t.id] });
+    setEdits(e => ({ ...e, [t.id]: undefined }));
+    setStatusMsg('Saved ✓');
+    await load();
+  });
+
+  const setStatus = (t, status) => withBusy('Updating…', async () => {
+    await post({ action: 'setStatus', id: t.id, status });
+    await load();
+  });
+
+  const remove = (t) => withBusy('Deleting…', async () => {
+    await post({ action: 'delete', id: t.id });
+    setStatusMsg('Deleted');
+    await load();
+  });
+
+  // Screenshots go through the same resize-and-upload path as every other
+  // admin image, so a phone screenshot does not post a 6MB payload.
+  const addFiles = (t, kind, files) => withBusy('Uploading…', async () => {
+    for (const file of Array.from(files)) {
+      const url = await uploadImageFile(file, { folder: 'todos', name: t.title, adminPassword });
+      await post({ action: 'addAttachment', todoId: t.id, url, kind });
+    }
+    setStatusMsg('Attached ✓');
+    await load();
+  });
+
+  // Anything that is not an image (a finished video, a Drive folder, a form
+  // PDF) is attached as a link rather than uploaded.
+  const addLink = (t, kind) => withBusy('Attaching…', async () => {
+    const url = window.prompt('Paste the link (video, Drive folder, PDF):');
+    if (!url) { setStatusMsg(''); return; }
+    const caption = window.prompt('Label it (optional):') || '';
+    await post({ action: 'addAttachment', todoId: t.id, url, caption, kind });
+    setStatusMsg('Attached ✓');
+    await load();
+  });
+
+  const removeAttachment = (id) => withBusy('Removing…', async () => {
+    await post({ action: 'removeAttachment', id });
+    await load();
+  });
+
+  const attFor = (todoId, kind) => attachments.filter(a => a.todo_id === todoId && a.kind === kind);
+
+  const shown = todos.filter(t =>
+    filter === 'all' ? true : filter === 'done' ? t.status === 'done' : t.status !== 'done');
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><Loader size={24} className="spin" /></div>;
+
+  return (
+    <div className="admin-media">
+      <div className="admin-media-body">
+        <div className="admin-media-tabs">
+          <button className={filter === 'open' ? 'active' : ''} onClick={() => setFilter('open')}>
+            To do ({todos.filter(t => t.status !== 'done').length})
+          </button>
+          <button className={filter === 'done' ? 'active' : ''} onClick={() => setFilter('done')}>
+            Done ({todos.filter(t => t.status === 'done').length})
+          </button>
+          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All</button>
+        </div>
+
+        {setupNeeded && (
+          <p className="admin-media-hint">
+            Run <strong>supabase-todos.sql</strong> in the Supabase SQL editor to create the two tables this tab needs.
+          </p>
+        )}
+
+        {statusMsg && <div className="admin-media-status">{busy && <Loader size={12} className="spin" />} {statusMsg}</div>}
+
+        {composing ? (
+          <div className="todo-compose">
+            <input
+              placeholder="What needs doing"
+              value={draftNew.title}
+              onChange={e => setDraftNew(d => ({ ...d, title: e.target.value }))}
+            />
+            <textarea
+              rows={6}
+              placeholder="How to do it. Steps, links, anything they need."
+              value={draftNew.body}
+              onChange={e => setDraftNew(d => ({ ...d, body: e.target.value }))}
+            />
+            <div className="todo-compose-row">
+              <label>
+                For
+                <select value={draftNew.assignedTo} onChange={e => setDraftNew(d => ({ ...d, assignedTo: e.target.value }))}>
+                  <option value="">{role === 'owner' ? 'Jenna' : 'Tovah'}</option>
+                  <option value="owner">Tovah</option>
+                  <option value="staff">Jenna</option>
+                  <option value="both">Both of us</option>
+                </select>
+              </label>
+              <label>
+                Due
+                <input type="date" value={draftNew.dueDate} onChange={e => setDraftNew(d => ({ ...d, dueDate: e.target.value }))} />
+              </label>
+              <button className="admin-upload-btn" disabled={busy} onClick={create}>Add to do</button>
+              <button className="admin-link-btn" onClick={() => setComposing(false)}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div className="admin-collection-new">
+            <button className="admin-upload-btn" onClick={() => setComposing(true)}>New to do</button>
+            <span className="admin-src-tag">Signed in as {whoName(role)}</span>
+          </div>
+        )}
+
+        {shown.length === 0 && !setupNeeded && (
+          <p className="admin-media-empty">Nothing here. Add the first one above.</p>
+        )}
+
+        {shown.map(t => {
+          const ed = edits[t.id];
+          const brief = attFor(t.id, 'brief');
+          const results = attFor(t.id, 'result');
+          const bodyOpen = openBody[t.id];
+          return (
+            <div key={t.id} className={`admin-collection-card todo-card ${t.status === 'done' ? 'is-done' : ''}`}>
+              <div className="todo-head">
+                <div className="todo-head-main">
+                  {ed ? (
+                    <input value={ed.title ?? t.title} onChange={e => setEdits(x => ({ ...x, [t.id]: { ...ed, title: e.target.value } }))} />
+                  ) : (
+                    <strong>{t.title}</strong>
+                  )}
+                  <div className="todo-meta">
+                    <span className={`todo-pill ${t.status}`}>{t.status === 'doing' ? 'In progress' : t.status === 'done' ? 'Done' : 'Open'}</span>
+                    <span>For {whoName(t.assigned_to)}</span>
+                    <span>From {whoName(t.created_by)}</span>
+                    {t.due_date && <span>Due {todoDate(t.due_date)}</span>}
+                    {t.done_at && <span>Finished {todoDate(t.done_at)}</span>}
+                  </div>
+                </div>
+                <div className="todo-actions">
+                  {t.status !== 'doing' && t.status !== 'done' && (
+                    <button className="admin-link-btn" disabled={busy} onClick={() => setStatus(t, 'doing')}>Start</button>
+                  )}
+                  {t.status !== 'done'
+                    ? <button className="admin-upload-btn" disabled={busy} onClick={() => setStatus(t, 'done')}>Mark done</button>
+                    : <button className="admin-link-btn" disabled={busy} onClick={() => setStatus(t, 'open')}>Reopen</button>}
+                </div>
+              </div>
+
+              {ed ? (
+                <>
+                  <textarea
+                    className="todo-body-edit"
+                    rows={10}
+                    value={ed.body ?? t.body ?? ''}
+                    onChange={e => setEdits(x => ({ ...x, [t.id]: { ...ed, body: e.target.value } }))}
+                  />
+                  <div className="todo-compose-row">
+                    <label>
+                      For
+                      <select
+                        value={ed.assignedTo ?? t.assigned_to}
+                        onChange={e => setEdits(x => ({ ...x, [t.id]: { ...ed, assignedTo: e.target.value } }))}
+                      >
+                        <option value="owner">Tovah</option>
+                        <option value="staff">Jenna</option>
+                        <option value="both">Both of us</option>
+                      </select>
+                    </label>
+                    <label>
+                      Due
+                      <input
+                        type="date"
+                        value={ed.dueDate ?? (t.due_date || '')}
+                        onChange={e => setEdits(x => ({ ...x, [t.id]: { ...ed, dueDate: e.target.value } }))}
+                      />
+                    </label>
+                    <button className="admin-upload-btn" disabled={busy} onClick={() => save(t)}>Save</button>
+                    <button className="admin-link-btn" onClick={() => setEdits(x => ({ ...x, [t.id]: undefined }))}>Cancel</button>
+                  </div>
+                </>
+              ) : t.body ? (
+                <>
+                  <div className={`todo-body ${bodyOpen ? 'open' : ''}`}>{t.body}</div>
+                  <button className="admin-link-btn" onClick={() => setOpenBody(o => ({ ...o, [t.id]: !bodyOpen }))}>
+                    {bodyOpen ? 'Show less' : 'Read the how to'}
+                  </button>
+                </>
+              ) : null}
+
+              <div className="todo-atts">
+                <div className="todo-att-group">
+                  <span className="admin-src-tag">The ask {brief.length > 0 && `(${brief.length})`}</span>
+                  <div className="todo-att-row">
+                    {brief.map(a => (
+                      <TodoAttachment key={a.id} a={a} canRemove onRemove={removeAttachment} />
+                    ))}
+                    <label className="admin-upload-btn">
+                      Add screenshots
+                      <input type="file" accept="image/*" multiple disabled={busy}
+                        onChange={e => { if (e.target.files?.length) addFiles(t, 'brief', e.target.files); e.target.value = ''; }} />
+                    </label>
+                    <button className="admin-link-btn" disabled={busy} onClick={() => addLink(t, 'brief')}>Add link</button>
+                  </div>
+                </div>
+
+                <div className="todo-att-group">
+                  <span className="admin-src-tag">Results {results.length > 0 && `(${results.length})`}</span>
+                  <div className="todo-att-row">
+                    {results.map(a => (
+                      <TodoAttachment key={a.id} a={a} canRemove onRemove={removeAttachment} />
+                    ))}
+                    <label className="admin-upload-btn">
+                      Upload result
+                      <input type="file" accept="image/*" multiple disabled={busy}
+                        onChange={e => { if (e.target.files?.length) addFiles(t, 'result', e.target.files); e.target.value = ''; }} />
+                    </label>
+                    <button className="admin-link-btn" disabled={busy} onClick={() => addLink(t, 'result')}>Add link</button>
+                  </div>
+                </div>
+              </div>
+
+              {!ed && (
+                <div className="todo-foot">
+                  <button className="admin-link-btn" onClick={() => setEdits(x => ({ ...x, [t.id]: {} }))}>Edit</button>
+                  <button className="admin-link-btn" disabled={busy} onClick={() => remove(t)}>Delete</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function AdminDashboard({ adminPassword, role }) {
   const [adminPage, setAdminPage] = useState('orders');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -3875,6 +4200,7 @@ function AdminDashboard({ adminPassword, role }) {
             <button className={adminPage === 'subscribers' ? 'active' : ''} onClick={() => { setAdminPage('subscribers'); setMenuOpen(false); }}>Subscribers</button>
             <button className={adminPage === 'shipping' ? 'active' : ''} onClick={() => { setAdminPage('shipping'); setMenuOpen(false); }}>Shipping</button>
             <button className={adminPage === 'atcost' ? 'active' : ''} onClick={() => { setAdminPage('atcost'); setMenuOpen(false); }}>Order at Cost</button>
+            <button className={adminPage === 'todos' ? 'active' : ''} onClick={() => { setAdminPage('todos'); setMenuOpen(false); }}>To Dos</button>
           </nav>
         </div>
       )}
@@ -3887,6 +4213,7 @@ function AdminDashboard({ adminPassword, role }) {
       {adminPage === 'subscribers' && <AdminSubscribersPage adminPassword={adminPassword} />}
       {adminPage === 'shipping' && <AdminShippingPage adminPassword={adminPassword} role={role} />}
       {adminPage === 'atcost' && <AdminOrderAtCostPage adminPassword={adminPassword} />}
+      {adminPage === 'todos' && <AdminTodosPage adminPassword={adminPassword} role={role} />}
     </div>
   );
 }

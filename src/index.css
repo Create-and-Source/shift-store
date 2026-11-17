@@ -4005,3 +4005,57 @@ body { padding-top: var(--announce-h); }
 .gal-chip.k-site-dormant b { color: #6b5827; }
 .gal-chip.via-copy { background: #f2f2f6; color: #555; }
 .gal-chip.via-copy b { color: #6a6a80; }
+
+/* ═══ ADMIN TO DOS ═══ */
+.todo-compose { border: 1px solid #e6e6e6; border-radius: 6px; background: #fff; padding: 14px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 10px; }
+.todo-compose input, .todo-compose textarea, .todo-body-edit {
+  width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;
+  font-family: inherit; color: #111; background: #fff;
+}
+.todo-compose textarea, .todo-body-edit { line-height: 1.55; resize: vertical; }
+.todo-body-edit { margin: 10px 0; }
+.todo-compose-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.todo-compose-row label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .05em; }
+.todo-compose-row select, .todo-compose-row input[type="date"] {
+  padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit; color: #111; background: #fff;
+}
+
+.todo-card.is-done { opacity: .66; }
+.todo-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.todo-head-main { min-width: 0; flex: 1; }
+.todo-head-main strong { font-size: 15px; color: #111; display: block; line-height: 1.35; }
+.todo-head-main input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 15px; font-weight: 700; font-family: inherit; }
+.todo-card.is-done .todo-head-main strong { text-decoration: line-through; }
+.todo-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 7px; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.todo-pill { padding: 2px 7px; border-radius: 3px; background: #eee; color: #666; }
+.todo-pill.open { background: #111; color: #fff; }
+.todo-pill.doing { background: var(--red, #e5322d); color: #fff; }
+.todo-pill.done { background: #d8efd8; color: #2f6b2f; }
+.todo-actions { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+
+.todo-body {
+  white-space: pre-wrap; font-size: 13px; line-height: 1.6; color: #444; margin: 12px 0 6px;
+  max-height: 86px; overflow: hidden; position: relative;
+}
+.todo-body.open { max-height: none; }
+.todo-body:not(.open)::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 42px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0), #fff);
+}
+
+.todo-atts { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
+.todo-att-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+.todo-att { width: 104px; border: 1px solid #e6e6e6; border-radius: 5px; overflow: hidden; background: #fff; }
+.todo-att-media { display: block; height: 78px; background: #f3f3f3; }
+.todo-att-media img, .todo-att-media video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.todo-att-link { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 11px; font-weight: 700; color: #888; }
+.todo-att-foot { padding: 5px 7px; display: flex; flex-direction: column; gap: 1px; }
+.todo-att-foot span { font-size: 11px; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.todo-att-foot em { font-size: 9px; color: #aaa; font-style: normal; text-transform: uppercase; letter-spacing: .05em; }
+.todo-att-foot .admin-link-btn { font-size: 10px; align-self: flex-start; }
+.todo-foot { display: flex; gap: 14px; margin-top: 12px; }
+
+@media (max-width: 640px) {
+  .todo-head { flex-direction: column; gap: 10px; }
+  .todo-actions { width: 100%; justify-content: flex-start; }
+}
